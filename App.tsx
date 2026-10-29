@@ -496,10 +496,6 @@ export default function App() {
         </div>
 
         {/* Footer Info */}
-        <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
-          <p className="font-semibold">Serra / ES • OAB/ES</p>
-          <p className="opacity-60 mt-0.5">Sistema Advocacia v2.5</p>
-        </div>
       </aside>
 
       {/* MAIN CONTENT AREA */}
