@@ -37,15 +37,26 @@ import {
   Target
 } from 'lucide-react';
 
+const MENU_PALETTE = {
+  fundo: '#5A1A2C',       // --menu-fundo
+  destaque: '#F5EEE9',   // --menu-destaque: ícones, nome e monograma
+  monograma: '#7E1B33',  // --menu-monograma
+  ativo: '#7E0A25',      // --menu-ativo
+  texto: '#FFFFFF',      // --menu-texto
+  subtitulo: '#B598A0',  // --menu-subtitulo
+  linha: '#6B3141'       // --menu-linha
+};
+
 const LIGHT_PALETTE = {
-  bordoPrincipal: '#800020',
-  bordoEscuro: '#581C2B',
-  dourado: '#D97706',
-  douradoClaro: '#F59E0B',
+  // Paleta clara neutra; o bordô fica concentrado na identidade do escritório.
+  bordoPrincipal: '#7E0A25',
+  bordoEscuro: '#111827',
+  dourado: '#7E1B33',
+  douradoClaro: '#7E0A25',
   fundoPagina: '#F3F4F6',
   fundoCartoes: '#FFFFFF',
   linhasBordas: '#E5E7EB',
-  caixaTotal: '#F9FAFB',
+  caixaTotal: '#F9F1F3',
   textoPrincipal: '#111827',
   textoApoio: '#6B7280',
   valoresReceber: '#059669',
@@ -53,14 +64,15 @@ const LIGHT_PALETTE = {
 };
 
 const DARK_PALETTE = {
-  bordoPrincipal: '#B83250',
-  bordoEscuro: '#3B0E19',
-  dourado: '#F59E0B',
-  douradoClaro: '#F9FAFB',
+  // O menu mantém as cores oficiais; o restante da interface adapta para grafite.
+  bordoPrincipal: '#7E0A25',
+  bordoEscuro: '#F9FAFB',
+  dourado: '#F5EEE9',
+  douradoClaro: '#F5EEE9',
   fundoPagina: '#121820',
   fundoCartoes: '#1E293B',
   linhasBordas: '#334155',
-  caixaTotal: '#243244',
+  caixaTotal: '#2B2229',
   textoPrincipal: '#F9FAFB',
   textoApoio: '#9CA3AF',
   valoresReceber: '#34D399',
@@ -74,6 +86,70 @@ function readLocalValue(key: string, fallback: any) {
     return raw ? JSON.parse(raw) : fallback;
   } catch {
     return fallback;
+  }
+}
+
+const OFFICE_DB_NAME = 'valeska-monteiro-office-db';
+const OFFICE_DB_STORE = 'app-state';
+const OFFICE_DB_KEY = 'office-data-v1';
+
+function openOfficeDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !('indexedDB' in window)) {
+      reject(new Error('IndexedDB não está disponível neste navegador.'));
+      return;
+    }
+    const request = window.indexedDB.open(OFFICE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(OFFICE_DB_STORE)) db.createObjectStore(OFFICE_DB_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Não foi possível abrir o armazenamento local.'));
+  });
+}
+
+async function loadSavedOfficeData(): Promise<any | null> {
+  try {
+    const db = await openOfficeDb();
+    const result = await new Promise<any>((resolve, reject) => {
+      const transaction = db.transaction(OFFICE_DB_STORE, 'readonly');
+      const request = transaction.objectStore(OFFICE_DB_STORE).get(OFFICE_DB_KEY);
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () => reject(request.error || new Error('Não foi possível ler os dados locais.'));
+      transaction.oncomplete = () => db.close();
+      transaction.onerror = () => reject(transaction.error || new Error('Falha ao ler os dados locais.'));
+    });
+    if (result) return result;
+  } catch (error) {
+    console.warn('IndexedDB indisponível; tentando recuperar o backup local:', error);
+  }
+  return readLocalValue('vm-office-data-v1', null);
+}
+
+async function saveOfficeDataLocally(payload: any): Promise<'indexedDB' | 'localStorage'> {
+  let indexedDbSaved = false;
+  try {
+    const db = await openOfficeDb();
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(OFFICE_DB_STORE, 'readwrite');
+      transaction.objectStore(OFFICE_DB_STORE).put(payload, OFFICE_DB_KEY);
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => reject(transaction.error || new Error('Não foi possível gravar os dados locais.'));
+      transaction.onabort = () => reject(transaction.error || new Error('Gravação local cancelada.'));
+    });
+    indexedDbSaved = true;
+  } catch (error) {
+    console.warn('IndexedDB não conseguiu salvar; tentando localStorage:', error);
+  }
+
+  // Mantém uma cópia compatível com as versões anteriores. O IndexedDB é a cópia principal.
+  try {
+    window.localStorage.setItem('vm-office-data-v1', JSON.stringify(payload));
+    return indexedDbSaved ? 'indexedDB' : 'localStorage';
+  } catch (error) {
+    if (indexedDbSaved) return 'indexedDB';
+    throw error;
   }
 }
 
@@ -96,7 +172,24 @@ function estimateBusinessDaysUntil(dateValue: string) {
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && window.localStorage.getItem('vm-sidebar-collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const PALETTE = isDarkMode ? DARK_PALETTE : LIGHT_PALETTE;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('vm-sidebar-collapsed', isSidebarCollapsed ? 'true' : 'false');
+    } catch {
+      // A navegação continua funcional nesta sessão, mesmo sem persistência da preferência.
+    }
+  }, [isSidebarCollapsed]);
+
+  const toggleSidebar = () => setIsSidebarCollapsed((current) => !current);
 
   useEffect(() => {
     try {
@@ -195,10 +288,7 @@ export default function App() {
   const [officeSettings, setOfficeSettings] = useState<any>(() => readLocalValue('vm-office-settings', { officeName: 'Valeska Monteiro Advocacia', oab: 'OAB/ES 41.715', email: 'contato@valeskamonteiro.adv.br', phone: '(27) 99752-5314', address: 'Serra / ES', lgpdConsent: false, lgpdAcceptedAt: '' }));
   const [moduleNotice, setModuleNotice] = useState('');
 
-  useEffect(() => { try { window.localStorage.setItem('vm-leads', JSON.stringify(leads)); } catch { /* armazenamento local limitado */ } }, [leads]);
-  useEffect(() => { try { window.localStorage.setItem('vm-financial-entries', JSON.stringify(financialEntries)); } catch { /* armazenamento local limitado */ } }, [financialEntries]);
-  useEffect(() => { try { window.localStorage.setItem('vm-documents', JSON.stringify(documents)); } catch { /* armazenamento local limitado */ } }, [documents]);
-  useEffect(() => { try { window.localStorage.setItem('vm-office-settings', JSON.stringify(officeSettings)); } catch { /* armazenamento local limitado */ } }, [officeSettings]);
+  // Os registros são persistidos em conjunto na camada de persistência abaixo.
   
   // Dynamic Month State (Default: October 2026)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1));
@@ -446,6 +536,146 @@ export default function App() {
 
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
 
+  // --- PERSISTÊNCIA DOS DADOS DO ESCRITÓRIO ---
+  // IndexedDB é a base local principal (suporta mais dados que localStorage).
+  // Também tentamos sincronizar com Supabase quando a tabela office_app_state está configurada.
+  const [dataHydrated, setDataHydrated] = useState(false);
+  const [cloudHydratedUserId, setCloudHydratedUserId] = useState<string | null>(null);
+  const [persistenceStatus, setPersistenceStatus] = useState('Carregando dados...');
+  const [lastSavedAt, setLastSavedAt] = useState('');
+
+  const applyPersistedOfficeData = (saved: any) => {
+    if (!saved || typeof saved !== 'object') return;
+    if (Array.isArray(saved.processes)) setProcesses(saved.processes);
+    if (Array.isArray(saved.clients)) setClients(saved.clients);
+    if (Array.isArray(saved.deadlines)) setDeadlines(saved.deadlines);
+    if (Array.isArray(saved.scannedPush)) setScannedPush(saved.scannedPush);
+    if (Array.isArray(saved.processedScanKeys)) setProcessedScanKeys(saved.processedScanKeys);
+    if (Array.isArray(saved.templates)) {
+      setTemplates(saved.templates);
+      setSelectedTemplate(saved.templates[0] || null);
+    }
+    if (Array.isArray(saved.tasks)) setTasks(saved.tasks);
+    if (Array.isArray(saved.leads)) setLeads(saved.leads);
+    if (Array.isArray(saved.financialEntries)) setFinancialEntries(saved.financialEntries);
+    if (Array.isArray(saved.documents)) setDocuments(saved.documents);
+    if (saved.officeSettings && typeof saved.officeSettings === 'object') setOfficeSettings(saved.officeSettings);
+    if (saved.savedAt) setLastSavedAt(saved.savedAt);
+  };
+
+  useEffect(() => {
+    let active = true;
+    const hydrate = async () => {
+      try {
+        const saved = await loadSavedOfficeData();
+        if (!active) return;
+        if (saved) applyPersistedOfficeData(saved);
+        setPersistenceStatus('Salvamento automático ativo');
+      } catch (error) {
+        console.error('Não foi possível carregar os dados salvos do escritório:', error);
+        if (active) setPersistenceStatus('Falha ao carregar os dados locais');
+      } finally {
+        if (active) setDataHydrated(true);
+      }
+    };
+    void hydrate();
+    return () => { active = false; };
+  }, []);
+
+  const buildOfficePayload = () => ({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    processes,
+    clients,
+    deadlines,
+    scannedPush,
+    processedScanKeys,
+    templates,
+    tasks,
+    leads,
+    financialEntries,
+    documents,
+    officeSettings
+  });
+
+  // Salvamento local automático: exclusões e edições também são persistidas.
+  useEffect(() => {
+    if (!dataHydrated) return;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      const payload = buildOfficePayload();
+      try {
+        const storage = await saveOfficeDataLocally(payload);
+        if (!active) return;
+        setLastSavedAt(payload.savedAt);
+        if (!session?.user?.id || cloudHydratedUserId !== session.user.id) {
+          setPersistenceStatus(storage === 'indexedDB' ? 'Salvo neste dispositivo' : 'Salvo no armazenamento local');
+        }
+      } catch (error) {
+        console.error('Falha no salvamento automático:', error);
+        if (active) setPersistenceStatus('Erro ao salvar — exporte um backup');
+      }
+    }, 150);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [dataHydrated, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings, session?.user?.id, cloudHydratedUserId]);
+
+  // Carrega primeiro o estado da conta autenticada para não sobrescrever a nuvem com dados vazios.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!dataHydrated || !userId) return;
+    let active = true;
+    const hydrateCloud = async () => {
+      setPersistenceStatus('Sincronizando com a nuvem...');
+      try {
+        const { data, error } = await supabase
+          .from('office_app_state')
+          .select('payload, saved_at')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!active) return;
+        const cloudPayload = data?.payload;
+        if (cloudPayload) {
+          const parsed = typeof cloudPayload === 'string' ? JSON.parse(cloudPayload) : cloudPayload;
+          applyPersistedOfficeData(parsed);
+          if (data?.saved_at) setLastSavedAt(data.saved_at);
+        }
+        setCloudHydratedUserId(userId);
+        setPersistenceStatus('Sincronização com a nuvem ativa');
+      } catch (error) {
+        console.warn('Sincronização Supabase indisponível; os dados continuam salvos localmente.', error);
+        if (active) setPersistenceStatus('Salvo neste dispositivo · nuvem não configurada');
+      }
+    };
+    void hydrateCloud();
+    return () => { active = false; };
+  }, [dataHydrated, session?.user?.id]);
+
+  // Grava na nuvem após pequenas pausas, agrupando alterações rápidas em um único salvamento.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!dataHydrated || !userId || cloudHydratedUserId !== userId) return;
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      const payload = buildOfficePayload();
+      try {
+        const { error } = await supabase.from('office_app_state').upsert({
+          user_id: userId,
+          payload,
+          saved_at: payload.savedAt
+        }, { onConflict: 'user_id' });
+        if (error) throw error;
+        if (!active) return;
+        setLastSavedAt(payload.savedAt);
+        setPersistenceStatus('Salvo na nuvem');
+      } catch (error) {
+        console.error('Falha ao sincronizar com Supabase:', error);
+        if (active) setPersistenceStatus('Salvo neste dispositivo · falha na nuvem');
+      }
+    }, 700);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [dataHydrated, session?.user?.id, cloudHydratedUserId, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings]);
+
   // Financial selected process object
   const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
@@ -471,7 +701,7 @@ export default function App() {
       honorarios: Number(newProcess.honorarios || 0),
       descontos: Number(newProcess.descontos || 0)
     };
-    setProcesses([item, ...processes]);
+    setProcesses(prev => [item, ...prev]);
     setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento' });
     setIsNewProcessOpen(false);
   };
@@ -480,7 +710,7 @@ export default function App() {
     e.preventDefault();
     if (!newClient.name) return;
     const item = { id: Date.now().toString(), ...newClient };
-    setClients([item, ...clients]);
+    setClients(prev => [item, ...prev]);
     setNewClient({ name: '', type: 'Pessoa Física', document: '', phone: '', email: '', status: 'Ativo' });
     setIsNewClientOpen(false);
   };
@@ -489,7 +719,7 @@ export default function App() {
     e.preventDefault();
     if (!newDeadline.title) return;
     const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
-    setDeadlines([item, ...deadlines]);
+    setDeadlines(prev => [item, ...prev]);
     setNewDeadline({ title: '', client: '', process: '', dueDate: '2026-10-28', dueTime: '17:00', type: 'FATAL' });
     setIsNewDeadlineOpen(false);
   };
@@ -731,7 +961,7 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center p-4 font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
         <div className="w-full max-w-md p-8 rounded-2xl shadow-xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-inner mb-1" style={{ borderColor: PALETTE.bordoPrincipal, backgroundColor: PALETTE.bordoEscuro }}>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-inner mb-1" style={{ borderColor: MENU_PALETTE.destaque, backgroundColor: MENU_PALETTE.monograma }}>
               {isResetMode ? <KeyRound size={28} style={{ color: '#FFFFFF' }} /> : <Lock size={28} style={{ color: '#FFFFFF' }} />}
             </div>
             <h1 className="font-serif font-bold text-2xl tracking-wide uppercase" style={{ color: PALETTE.bordoPrincipal }}>
@@ -757,7 +987,7 @@ export default function App() {
 
           <form onSubmit={isResetMode ? handleResetPassword : handleLogin} className="space-y-4">
             {authError && (
-              <div className="p-3 text-xs rounded-lg bg-rose-950/80 border border-rose-500 text-rose-200 text-center font-medium">
+              <div className="p-3 text-xs rounded-lg bg-amber-950/80 border border-amber-500 text-amber-200 text-center font-medium">
                 {authError}
               </div>
             )}
@@ -845,13 +1075,11 @@ export default function App() {
       <style>{`
         .app-dark .bg-white { background-color: #1E293B !important; }
         .app-dark input, .app-dark textarea, .app-dark select { background-color: #1E293B !important; color: #F9FAFB !important; border-color: #334155 !important; }
-        .app-shell:not(.app-dark) .text-rose-900, .app-shell:not(.app-dark) .text-rose-800, .app-shell:not(.app-dark) .text-rose-700, .app-shell:not(.app-dark) .text-red-800, .app-shell:not(.app-dark) .text-red-700 { color: #D97706 !important; }
-        .app-shell:not(.app-dark) .text-amber-900, .app-shell:not(.app-dark) .text-amber-800, .app-shell:not(.app-dark) .text-amber-700 { color: #D97706 !important; }
+        .app-shell:not(.app-dark) .text-amber-900, .app-shell:not(.app-dark) .text-amber-800, .app-shell:not(.app-dark) .text-amber-700, .app-shell:not(.app-dark) .text-red-800, .app-shell:not(.app-dark) .text-red-700 { color: #8B5E1A !important; }
         .app-dark .text-black, .app-dark .text-slate-900, .app-dark .text-slate-800, .app-dark .text-slate-700, .app-dark .text-gray-900, .app-dark .text-gray-800 { color: #F9FAFB !important; }
         .app-dark .text-slate-600, .app-dark .text-slate-500, .app-dark .text-gray-600, .app-dark .text-gray-500 { color: #9CA3AF !important; }
         .app-dark .text-emerald-900, .app-dark .text-emerald-800, .app-dark .text-emerald-700, .app-dark .text-emerald-600 { color: #34D399 !important; }
-        .app-dark .text-rose-900, .app-dark .text-rose-800, .app-dark .text-rose-700, .app-dark .text-red-800, .app-dark .text-red-700 { color: #F59E0B !important; }
-        .app-dark .text-amber-900, .app-dark .text-amber-800, .app-dark .text-amber-700 { color: #F59E0B !important; }
+        .app-dark .text-amber-900, .app-dark .text-amber-800, .app-dark .text-amber-700, .app-dark .text-red-800, .app-dark .text-red-700 { color: #F59E0B !important; }
         .app-dark .border, .app-dark .border-t, .app-dark .border-b, .app-dark .border-r, .app-dark .border-l { border-color: #334155; }
         .app-dark [class~="hover:bg-black/5"]:hover { background-color: rgba(255,255,255,.07) !important; }
       `}</style>
@@ -862,8 +1090,8 @@ export default function App() {
           style={{
             top: `${hoverPos.y}px`,
             left: `${hoverPos.x}px`,
-            backgroundColor: PALETTE.bordoEscuro,
-            borderColor: PALETTE.dourado
+            backgroundColor: isDarkMode ? '#1E293B' : '#111827',
+            borderColor: MENU_PALETTE.linha
           }}
         >
           <div className="flex justify-between items-start border-b pb-1.5" style={{ borderColor: `${PALETTE.dourado}50` }}>
@@ -891,23 +1119,42 @@ export default function App() {
         </div>
       )}
 
-      {/* SIDEBAR NAVIGATION */}
-      <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+      {/* SIDEBAR NAVIGATION: recolhível no desktop e ocultável no celular */}
+      <aside
+        className={`${isSidebarCollapsed ? 'hidden md:flex md:w-20' : 'flex w-full md:w-64'} border-r flex-shrink-0 flex-col justify-between transition-[width] duration-200 ease-in-out`}
+        style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}
+        aria-label="Menu principal"
+      >
         <div>
+          <div className={`${isSidebarCollapsed ? 'px-2 pt-3 justify-center' : 'px-3 pt-3 justify-end'} flex`}>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border p-2 text-xs transition hover:bg-white/10"
+              style={{ color: MENU_PALETTE.destaque, borderColor: MENU_PALETTE.linha }}
+            >
+              {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              {!isSidebarCollapsed && <span className="hidden md:inline">Recolher menu</span>}
+            </button>
+          </div>
           {/* Header Monogram */}
-          <div className="p-6 text-center border-b" style={{ borderColor: `${PALETTE.dourado}30` }}>
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-md mb-2" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoPrincipal }}>
-              <span className="font-serif font-bold text-xl tracking-wider" style={{ color: PALETTE.douradoClaro }}>
+          <div className={`${isSidebarCollapsed ? 'px-2 py-4' : 'p-6'} text-center border-b transition-all`} style={{ borderColor: MENU_PALETTE.linha }}>
+            <div className={`inline-flex items-center justify-center ${isSidebarCollapsed ? 'w-11 h-11' : 'w-16 h-16'} rounded-full border-2 shadow-md mb-2 transition-all`} style={{ borderColor: MENU_PALETTE.destaque, backgroundColor: MENU_PALETTE.monograma }} title="Valeska Monteiro">
+              <span className={`${isSidebarCollapsed ? 'text-base' : 'text-xl'} font-serif font-bold tracking-wider`} style={{ color: MENU_PALETTE.destaque }}>
                 VM
               </span>
             </div>
-            <h1 className="font-serif font-bold text-sm tracking-widest uppercase mt-1" style={{ color: PALETTE.douradoClaro }}>
-              DRA. VALESKA MONTEIRO
-            </h1>
+            {!isSidebarCollapsed && (
+              <h1 className="font-serif font-bold text-sm tracking-widest uppercase mt-1" style={{ color: MENU_PALETTE.destaque }}>
+                DRA. VALESKA MONTEIRO
+              </h1>
+            )}
           </div>
 
           {/* Nav Items */}
-          <nav className="p-3 space-y-1">
+          <nav className={`${isSidebarCollapsed ? 'p-2' : 'p-3'} space-y-1`} aria-label="Navegação do escritório">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Briefcase },
               { id: 'processes', label: 'Processos', icon: FileText },
@@ -926,17 +1173,19 @@ export default function App() {
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id); setModuleNotice(''); if (tab.id === 'agenda') setAgendaSubTab('prazos'); if (tab.id === 'workspace') setWorkspaceSubTab('modelos'); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold transition ${
-                    isActive ? 'shadow-md font-bold' : 'hover:bg-white/10'
-                  }`}
+                  className={`w-full flex items-center rounded-xl text-xs font-semibold transition ${
+                    isSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
+                  } ${isActive ? 'shadow-md font-bold' : 'hover:bg-white/10'}`}
                   style={{
-                    backgroundColor: isActive ? PALETTE.bordoPrincipal : 'transparent',
-                    // O menu tem fundo bordô também no modo escuro; nunca usar a cor do fundo da página no texto.
-                    color: isActive ? '#FFFFFF' : (isDarkMode ? '#F9FAFB' : PALETTE.fundoPagina)
+                    backgroundColor: isActive ? MENU_PALETTE.ativo : 'transparent',
+                    color: MENU_PALETTE.texto
                   }}
+                  title={isSidebarCollapsed ? tab.label : undefined}
+                  aria-label={tab.label}
+                  aria-current={isActive ? 'page' : undefined}
                 >
-                  <Icon size={16} style={{ color: isActive ? PALETTE.douradoClaro : PALETTE.dourado }} />
-                  <span>{tab.label}</span>
+                  <Icon size={18} style={{ color: MENU_PALETTE.destaque, flexShrink: 0 }} />
+                  {!isSidebarCollapsed && <span>{tab.label}</span>}
                 </button>
               );
             })}
@@ -944,40 +1193,64 @@ export default function App() {
         </div>
 
         {/* Footer Info & Botão Sair */}
-        <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
-          <p className="font-semibold">Serra / ES • OAB/ES</p>
-          <p className="opacity-60 mt-0.5 mb-3">Sistema Advocacia v2.5</p>
+        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'} border-t text-center text-[10px]`} style={{ borderColor: MENU_PALETTE.linha, color: MENU_PALETTE.destaque }}>
+          {!isSidebarCollapsed && <>
+            <p className="font-semibold">Serra / ES • OAB/ES</p>
+            <p className="mt-0.5 mb-3" style={{ color: MENU_PALETTE.subtitulo }}>Sistema Advocacia v2.5</p>
+          </>}
           <button
             type="button"
             onClick={() => { setActiveTab('settings'); setModuleNotice(''); }}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold mb-2 border transition"
-            style={{ color: isDarkMode ? '#F9FAFB' : '#FFFFFF', backgroundColor: activeTab === 'settings' ? PALETTE.bordoPrincipal : 'transparent', borderColor: `${PALETTE.dourado}70` }}
+            className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} py-2 px-2 rounded-lg text-xs font-bold mb-2 border transition`}
+            style={{ color: MENU_PALETTE.texto, backgroundColor: activeTab === 'settings' ? MENU_PALETTE.ativo : 'transparent', borderColor: MENU_PALETTE.linha }}
+            title="Configurações"
+            aria-label="Configurações"
           >
-            <Settings size={14} /> Configurações
+            <Settings size={16} /> {!isSidebarCollapsed && <span>Configurações</span>}
           </button>
-          <button 
+          <button
+            type="button"
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition"
+            className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} py-2 px-2 rounded-lg text-xs font-bold border transition`}
+            style={{ color: MENU_PALETTE.destaque, backgroundColor: 'rgba(245,238,233,0.06)', borderColor: MENU_PALETTE.linha }}
+            title="Sair do Sistema"
+            aria-label="Sair do Sistema"
           >
-            <LogOut size={14} /> Sair do Sistema
+            <LogOut size={16} /> {!isSidebarCollapsed && <span>Sair do Sistema</span>}
           </button>
         </div>
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 min-w-0 flex flex-col transition-[width] duration-200">
         {/* Top Header Banner */}
-        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}>
           <div>
             <h2 className="font-serif font-bold text-lg" style={{ color: '#FFFFFF' }}>
               Advocacia & Consultoria Jurídica
             </h2>
-            <p className="text-xs" style={{ color: PALETTE.douradoClaro }}>
+            <p className="text-xs" style={{ color: MENU_PALETTE.subtitulo }}>
               Dra. Valeska Monteiro • Serra / ES
+            </p>
+            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: isDarkMode ? '#9CA3AF' : '#D1D5DB' }} title={lastSavedAt ? `Último salvamento: ${new Date(lastSavedAt).toLocaleString('pt-BR')}` : 'Os dados são salvos automaticamente neste navegador'}>
+              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: persistenceStatus.includes('Erro') || persistenceStatus.includes('Falha') ? '#F5EEE9' : '#34D399' }} />
+              {persistenceStatus}{lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              aria-expanded={!isSidebarCollapsed}
+              title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              className="px-3 py-2.5 rounded-xl border font-bold text-xs flex items-center gap-2 transition hover:brightness-105"
+              style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}
+            >
+              {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              <span className="hidden sm:inline">{isSidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}</span>
+            </button>
             <button
               type="button"
               onClick={toggleTheme}
@@ -1339,8 +1612,8 @@ export default function App() {
                         <button onClick={() => setEditingItem({ type: 'process', data: { ...proc } })} className="p-1 hover:bg-black/5 rounded" title="Editar processo">
                           <Pencil size={13} style={{ color: PALETTE.dourado }} />
                         </button>
-                        <button onClick={() => { if (window.confirm('Excluir este processo?')) setProcesses(prev => prev.filter(p => p.id !== proc.id)); }} className="p-1 hover:bg-rose-50 rounded" title="Excluir processo">
-                          <Trash2 size={13} className="text-rose-600" />
+                        <button onClick={() => { if (window.confirm('Excluir este processo?')) setProcesses(prev => prev.filter(p => p.id !== proc.id)); }} className="p-1 hover:bg-amber-50 rounded" title="Excluir processo">
+                          <Trash2 size={13} className="text-amber-700" />
                         </button>
                       </div>
                       <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{proc.client}</h4>
@@ -1395,8 +1668,8 @@ export default function App() {
                         <button onClick={() => setEditingItem({ type: 'client', data: { ...cli } })} className="p-1 hover:bg-black/5 rounded" title="Editar cliente">
                           <Pencil size={14} style={{ color: PALETTE.dourado }} />
                         </button>
-                        <button onClick={() => { if (window.confirm('Excluir este cliente?')) setClients(prev => prev.filter(c => c.id !== cli.id)); }} className="p-1 hover:bg-rose-50 rounded" title="Excluir cliente">
-                          <Trash2 size={14} className="text-rose-600" />
+                        <button onClick={() => { if (window.confirm('Excluir este cliente?')) setClients(prev => prev.filter(c => c.id !== cli.id)); }} className="p-1 hover:bg-amber-50 rounded" title="Excluir cliente">
+                          <Trash2 size={14} className="text-amber-700" />
                         </button>
                       </div>
                     </div>
@@ -1520,9 +1793,9 @@ export default function App() {
                                 onClick={(e) => { e.stopPropagation(); setSelectedDeadlineModal({ ...item }); }}
                                 className="p-1.5 rounded text-[10px] font-bold cursor-pointer transition truncate border shadow-sm"
                                 style={{
-                                  backgroundColor: item.completed ? '#D1FAE5' : item.type === 'FATAL' ? '#FEE2E2' : '#FEF3C7',
-                                  color: item.completed ? '#065F46' : item.type === 'FATAL' ? '#991B1B' : '#92400E',
-                                  borderColor: item.type === 'FATAL' ? '#FCA5A5' : PALETTE.dourado
+                                  backgroundColor: item.completed ? (isDarkMode ? '#17382F' : '#DDF4E9') : item.type === 'FATAL' ? (isDarkMode ? '#453621' : '#FBEDD4') : (isDarkMode ? '#3A3325' : '#F5F1E7'),
+                                  color: item.completed ? (isDarkMode ? '#34D399' : '#24624D') : item.type === 'FATAL' ? (isDarkMode ? '#F59E0B' : '#8B5E1A') : (isDarkMode ? '#F5EEE9' : '#775B28'),
+                                  borderColor: item.type === 'FATAL' ? (isDarkMode ? '#8D7042' : '#E5C17B') : PALETTE.dourado
                                 }}
                               >
                                 <span className={item.completed ? 'line-through opacity-70' : ''}>
@@ -1635,7 +1908,7 @@ export default function App() {
                         <h4 className="font-bold text-xs mt-0.5" style={{ color: PALETTE.textoPrincipal }}>{tmpl.title}</h4>
                         <div className="flex gap-2 mt-2">
                           <button onClick={(e) => { e.stopPropagation(); setNewTemplate({ category: tmpl.category, title: tmpl.title, description: tmpl.description, content: tmpl.content }); setEditingItem({ type: 'template', data: { ...tmpl } }); setIsNewTemplateOpen(true); }} className="text-[10px] font-bold flex items-center gap-1" style={{ color: PALETTE.textoPrincipal }}><Pencil size={11}/> Editar</button>
-                          <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Excluir este modelo de peça?')) { setTemplates(prev => prev.filter(t => t.id !== tmpl.id)); if (selectedTemplate?.id === tmpl.id) setSelectedTemplate(templates.find(t => t.id !== tmpl.id) || null); } }} className="text-[10px] font-bold flex items-center gap-1 text-rose-700"><Trash2 size={11}/> Excluir</button>
+                          <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Excluir este modelo de peça?')) { setTemplates(prev => prev.filter(t => t.id !== tmpl.id)); if (selectedTemplate?.id === tmpl.id) setSelectedTemplate(templates.find(t => t.id !== tmpl.id) || null); } }} className="text-[10px] font-bold flex items-center gap-1 text-amber-800"><Trash2 size={11}/> Excluir</button>
                         </div>
                       </div>
                     ))}
@@ -1838,7 +2111,7 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
                 {['A fazer', 'Em andamento', 'Em revisão', 'Concluída'].map(status => {
                   const columnTasks = tasks.filter(task => task.status === status && (taskFilter === 'Todas' || task.priority === taskFilter));
-                  return <section key={status} onDragOver={e => e.preventDefault()} onDrop={e => { const id = e.dataTransfer.getData('text/plain'); if (id) moveTask(id, status); }} className="rounded-2xl border p-3 min-h-72" style={{ backgroundColor: '#EDE4D6', borderColor: PALETTE.linhasBordas }}>
+                  return <section key={status} onDragOver={e => e.preventDefault()} onDrop={e => { const id = e.dataTransfer.getData('text/plain'); if (id) moveTask(id, status); }} className="rounded-2xl border p-3 min-h-72" style={{ backgroundColor: PALETTE.caixaTotal, borderColor: PALETTE.linhasBordas }}>
                     <div className="flex items-center justify-between px-1 pb-3">
                       <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: PALETTE.bordoEscuro }}>{status}</h4>
                       <span className="text-[10px] rounded-full px-2 py-1 bg-white font-bold">{columnTasks.length}</span>
@@ -1847,11 +2120,11 @@ export default function App() {
                       {columnTasks.map(task => <article key={task.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', task.id)} className="p-3 rounded-xl bg-white border shadow-sm cursor-grab active:cursor-grabbing space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
                         <div className="flex justify-between gap-2 items-start">
                           <h5 className="text-xs font-bold leading-relaxed" style={{ color: PALETTE.textoPrincipal }}>{task.title}</h5>
-                          <button onClick={() => { if (window.confirm('Excluir esta tarefa?')) setTasks(prev => prev.filter(t => t.id !== task.id)); }} title="Excluir tarefa" className="text-rose-600"><Trash2 size={13}/></button>
+                          <button onClick={() => { if (window.confirm('Excluir esta tarefa?')) setTasks(prev => prev.filter(t => t.id !== task.id)); }} title="Excluir tarefa" className="text-amber-700"><Trash2 size={13}/></button>
                         </div>
                         {task.description && <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>{task.description}</p>}
                         <div className="flex flex-wrap gap-1.5">
-                          <span className="text-[9px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: task.priority === 'Alta' ? '#FEE2E2' : task.priority === 'Média' ? '#FEF3C7' : '#D1FAE5', color: task.priority === 'Alta' ? '#991B1B' : task.priority === 'Média' ? '#92400E' : '#065F46' }}>{task.priority}</span>
+                          <span className="text-[9px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: task.priority === 'Alta' ? (isDarkMode ? '#453621' : '#FBEDD4') : task.priority === 'Média' ? (isDarkMode ? '#3A3325' : '#F5F1E7') : (isDarkMode ? '#17382F' : '#DDF4E9'), color: task.priority === 'Alta' ? (isDarkMode ? '#F59E0B' : '#8B5E1A') : task.priority === 'Média' ? (isDarkMode ? '#F5EEE9' : '#775B28') : (isDarkMode ? '#34D399' : '#24624D') }}>{task.priority}</span>
                           {task.dueDate && <span className="text-[9px] px-2 py-1 rounded-full bg-slate-100 text-slate-600">{task.dueDate}</span>}
                         </div>
                         <div className="flex gap-1 pt-1">
@@ -1970,15 +2243,15 @@ export default function App() {
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-:root{--bg:#F3F4F6;--card:#FFFFFF;--ink:#111827;--mute:#6B7280;--wine:#800020;--wine2:#581C2B;--gold:#D97706;--tint:#FFF7ED;--line:#E5E7EB;--ok:#059669;--neg:#D97706;--accent:#800020;
+:root{--bg:#F3F4F6;--card:#FFFFFF;--ink:#111827;--mute:#6B7280;--wine:#7E0A25;--wine2:#5A1A2C;--gold:#7E1B33;--tint:#F9F1F3;--line:#E5E7EB;--ok:#059669;--neg:#D97706;--accent:#7E0A25;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121820;--card:#1E293B;--ink:#F9FAFB;--mute:#9CA3AF;--wine:#B83250;--wine2:#3B0E19;--gold:#F59E0B;--tint:#243244;--line:#334155;--ok:#34D399;--neg:#F59E0B;--accent:#B83250;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#121820;--card:#1E293B;--ink:#F9FAFB;--mute:#9CA3AF;--wine:#B83250;--wine2:#3B0E19;--gold:#F59E0B;--tint:#243244;--line:#334155;--ok:#34D399;--neg:#F59E0B;--accent:#B83250;color-scheme:dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121820;--card:#1E293B;--ink:#F9FAFB;--mute:#9CA3AF;--wine:#7E0A25;--wine2:#5A1A2C;--gold:#F5EEE9;--tint:#2B2229;--line:#334155;--ok:#34D399;--neg:#F59E0B;--accent:#7E0A25;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121820;--card:#1E293B;--ink:#F9FAFB;--mute:#9CA3AF;--wine:#7E0A25;--wine2:#5A1A2C;--gold:#F5EEE9;--tint:#2B2229;--line:#334155;--ok:#34D399;--neg:#F59E0B;--accent:#7E0A25;color-scheme:dark}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;line-height:1.5}
-.hero{background:linear-gradient(var(--wine),var(--wine2));color:#f6efe2;text-align:center;padding:34px 18px 38px}
-.kicker{color:#d9bd7e;letter-spacing:.2em;font-size:11px;font-weight:600;margin:0 0 8px}
+.hero{background:linear-gradient(var(--wine2),var(--wine));color:#F5EEE9;text-align:center;padding:34px 18px 38px}
+.kicker{color:#F5EEE9;letter-spacing:.2em;font-size:11px;font-weight:600;margin:0 0 8px}
 h1{font-family:'Playfair Display',serif;font-size:31px;line-height:1.1;margin:0 auto 10px;max-width:640px}
 .hero p{margin:4px auto;max-width:560px;font-size:14px;opacity:.92}
 .wrap{max-width:1040px;margin:0 auto;padding:16px 16px 100px}
@@ -2284,7 +2557,7 @@ function printPdfFallback(printWindow){
  const escapeHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const lines=texto().split('\\n');
  const body=lines.map(line=>line.trim()?'<p>'+escapeHtml(line.split('*').join(''))+'</p>':'<div class="space"></div>').join('');
- const printableHtml='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Simulação trabalhista</title><style>body{font:12px Arial,sans-serif;color:#111827;margin:24mm 18mm}header{background:#7d1f3d;color:#f6efe2;padding:18px;margin:-12mm -6mm 18px}h1{font:bold 20px Georgia;margin:0 0 6px}header p{margin:0;color:#d9bd7e}p{white-space:pre-wrap;line-height:1.45;margin:4px 0}.space{height:7px}.foot{margin-top:28px;border-top:1px solid #d9bd7e;padding-top:8px;font-size:10px}@media print{button{display:none}}</style></head><body><header><h1>VALESKA MONTEIRO</h1><p>Advocacia e Consultoria Jurídica | OAB/ES 41.715</p></header><h2>Simulação de verbas trabalhistas</h2>'+body+'<div class="foot">Estimativa informativa, sujeita à conferência profissional.</div></body></html>';
+ const printableHtml='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Simulação trabalhista</title><style>body{font:12px Arial,sans-serif;color:#111827;margin:24mm 18mm}header{background:#5A1A2C;color:#F5EEE9;padding:18px;margin:-12mm -6mm 18px}h1{font:bold 20px Georgia;margin:0 0 6px}header p{margin:0;color:#B598A0}p{white-space:pre-wrap;line-height:1.45;margin:4px 0}.space{height:7px}.foot{margin-top:28px;border-top:1px solid #B598A0;padding-top:8px;font-size:10px}@media print{button{display:none}}</style></head><body><header><h1>VALESKA MONTEIRO</h1><p>Advocacia e Consultoria Jurídica | OAB/ES 41.715</p></header><h2>Simulação de verbas trabalhistas</h2>'+body+'<div class="foot">Estimativa informativa, sujeita à conferência profissional.</div></body></html>';
  printWindow.document.open();
  printWindow.document.write(printableHtml);
  printWindow.document.close();
@@ -2332,12 +2605,12 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  --ink-soft:#6B7280;
  --paper:#F3F4F6;
  --paper-alt:#FFFFFF;
- --burgundy-900:#581C2B;
- --burgundy-700:#800020;
- --burgundy-500:#800020;
- --gold-600:#D97706;
- --gold-300:#F59E0B;
- --gold-100:#E5E7EB;
+ --burgundy-900:#5A1A2C;
+ --burgundy-700:#7E0A25;
+ --burgundy-500:#7E1B33;
+ --gold-600:#7E1B33;
+ --gold-300:#B598A0;
+ --gold-100:#F9F1F3;
  --line:#E5E7EB;
  --green-700:#059669;
  color-scheme:light;
@@ -2347,11 +2620,11 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  --ink-soft:#9CA3AF;
  --paper:#121820;
  --paper-alt:#1E293B;
- --burgundy-900:#3B0E19;
- --burgundy-700:#B83250;
+ --burgundy-900:#5A1A2C;
+ --burgundy-700:#7E0A25;
  --burgundy-500:#B83250;
- --gold-600:#F59E0B;
- --gold-300:#9CA3AF;
+ --gold-600:#F5EEE9;
+ --gold-300:#B598A0;
  --gold-100:#334155;
  --line:#334155;
  --green-700:#34D399;
@@ -3349,7 +3622,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
      link.id = 'whatsappFallbackLink';
      link.textContent = 'Abrir WhatsApp com a mensagem pronta';
      link.target = '_blank'; link.rel = 'noopener';
-     link.style.cssText = 'display:block;margin-top:8px;color:#800020;font-weight:700';
+     link.style.cssText = 'display:block;margin-top:8px;color:#7E0A25;font-weight:700';
      document.getElementById('whatsappBtn').insertAdjacentElement('afterend', link);
    }
    link.href = url;
@@ -3398,16 +3671,16 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
  *{box-sizing:border-box;}
  body{font-family:'Inter',sans-serif;color:#111827;max-width:760px;margin:0 auto;padding:36px 28px 60px;}
- h1{font-family:'Playfair Display',serif;color:#800020;font-size:26px;margin:0 0 4px;}
+ h1{font-family:'Playfair Display',serif;color:#7E0A25;font-size:26px;margin:0 0 4px;}
  .sub{color:#6B7280;font-size:13px;margin-bottom:24px;}
  .meta{font-size:13.5px;color:#111827;margin-bottom:4px;}
  .pcat{margin-bottom:16px;border-bottom:1px solid #E5E7EB;padding-bottom:10px;}
  .pcat-head{display:flex;justify-content:space-between;border-bottom:2px solid #D97706;padding-bottom:6px;margin-bottom:8px;}
- .pcat-head h3{font-family:'Playfair Display',serif;font-size:17px;color:#800020;margin:0;}
+ .pcat-head h3{font-family:'Playfair Display',serif;font-size:17px;color:#7E0A25;margin:0;}
  .prow{display:flex;justify-content:space-between;font-size:13.5px;padding:3px 0;}
  .muted{color:#6B7280;font-size:12px;}
  .total-box{background:#F3F4F6;border:1.5px solid #E5E7EB;border-radius:8px;padding:16px 18px;margin:22px 0;text-align:center;}
- .total-box .val{font-family:'Playfair Display',serif;font-size:26px;color:#800020;font-weight:600;}
+ .total-box .val{font-family:'Playfair Display',serif;font-size:26px;color:#7E0A25;font-weight:600;}
  .pensao-box{border:1px solid #E5E7EB;border-radius:8px;padding:14px 18px;margin-bottom:20px;}
  .pensao-box .line{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px dotted #E5E7EB;}
  .pensao-box .line:last-child{border-bottom:none;}
@@ -3419,7 +3692,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  .sig-role{font-size:12px;color:#6B7280;margin-top:2px;}
  .sig-place{font-size:13px;color:#111827;margin-bottom:46px;text-align:right;}
  .print-actions{margin:0 0 24px;}
- .print-actions button{background:#7d1f3d;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-size:13.5px;cursor:pointer;}
+ .print-actions button{background:#7E0A25;color:#fff;border:none;padding:10px 16px;border-radius:6px;font-size:13.5px;cursor:pointer;}
  @media print{ .print-actions{display:none;} body{padding:0 8px;} }
 </style></head>
 <body>
@@ -3849,7 +4122,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                     setDeadlines(deadlines.filter((d) => d.id !== selectedDeadlineModal.id));
                     setSelectedDeadlineModal(null);
                   }}
-                  className="px-3 py-2 rounded-lg text-rose-700 font-bold flex items-center gap-1 hover:bg-rose-50"
+                  className="px-3 py-2 rounded-lg text-amber-800 font-bold flex items-center gap-1 hover:bg-amber-50"
                 >
                   <Trash2 size={14} /> Excluir
                 </button>
