@@ -1483,7 +1483,7 @@ export default function App() {
                   </div>
                   <form onSubmit={addTask} className="flex gap-2 w-full md:w-auto">
                     <input value={taskDraft} onChange={e => setTaskDraft(e.target.value)} placeholder="Nome da nova tarefa..." aria-label="Nome da nova tarefa" required className="flex-1 md:w-64 p-2.5 border rounded-xl text-xs bg-white" style={{ borderColor: PALETTE.linhasBordas }} />
-                    <button type="submit" disabled={!taskDraft.trim()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
+                    <button type="button" onClick={() => addTask()} disabled={!taskDraft.trim()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
                   </form>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
@@ -1898,9 +1898,9 @@ function printPdfFallback(printWindow){
  if(!printWindow || printWindow.closed){toast('O navegador bloqueou a janela de impressão. Permita pop-ups e tente novamente.');return false}
  const escapeHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const lines=texto().split('\\n');
- const body=lines.map(line=>line.trim()?'<p>'+escapeHtml(line.replace(/^\*|\*$/g,''))+'</p>':'<div class="space"></div>').join('');
+ const body=lines.map(line=>line.trim()?'<p>'+escapeHtml(line.replace(/^\\*|\\*$/g,''))+'</p>':'<div class="space"></div>').join('');
  printWindow.document.open();
- printWindow.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Simulação trabalhista</title><style>body{font:12px Arial,sans-serif;color:#2a1a20;margin:24mm 18mm}header{background:#7d1f3d;color:#f6efe2;padding:18px;margin:-12mm -6mm 18px}h1{font: bold 20px Georgia;margin:0 0 6px}header p{margin:0;color:#d9bd7e}p{white-space:pre-wrap;line-height:1.45;margin:4px 0}.space{height:7px}.foot{margin-top:28px;border-top:1px solid #d9bd7e;padding-top:8px;font-size:10px}@media print{button{display:none}}</style></head><body><header><h1>VALESKA MONTEIRO</h1><p>Advocacia e Consultoria Jurídica | OAB/ES 41.715</p></header><h2>Simulação de verbas trabalhistas</h2>'+body+'<div class="foot">Estimativa informativa, sujeita à conferência profissional.</div><script>window.onload=function(){setTimeout(function(){window.focus();window.print()},300)};<\/script></body></html>');
+ printWindow.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Simulação trabalhista</title><style>body{font:12px Arial,sans-serif;color:#2a1a20;margin:24mm 18mm}header{background:#7d1f3d;color:#f6efe2;padding:18px;margin:-12mm -6mm 18px}h1{font: bold 20px Georgia;margin:0 0 6px}header p{margin:0;color:#d9bd7e}p{white-space:pre-wrap;line-height:1.45;margin:4px 0}.space{height:7px}.foot{margin-top:28px;border-top:1px solid #d9bd7e;padding-top:8px;font-size:10px}@media print{button{display:none}}</style></head><body><header><h1>VALESKA MONTEIRO</h1><p>Advocacia e Consultoria Jurídica | OAB/ES 41.715</p></header><h2>Simulação de verbas trabalhistas</h2>'+body+'<div class="foot">Estimativa informativa, sujeita à conferência profissional.</div><script>window.onload=function(){setTimeout(function(){window.focus();window.print()},300)};<\\/script></body></html>');
  printWindow.document.close();
  toast('Gerador de PDF externo indisponível. Use “Salvar como PDF” na janela de impressão.');
  return true;
