@@ -21,7 +21,20 @@ import {
   LogOut,
   KeyRound,
   Sun,
-  Moon
+  Moon,
+  UserPlus,
+  Wallet,
+  FolderOpen,
+  BarChart3,
+  Settings,
+  CalendarDays,
+  ClipboardList,
+  Download,
+  Upload,
+  FileUp,
+  CheckCircle2,
+  Clock3,
+  Target
 } from 'lucide-react';
 
 const LIGHT_PALETTE = {
@@ -53,6 +66,33 @@ const DARK_PALETTE = {
   valoresReceber: '#34D399',
   descontos: '#F59E0B'
 };
+
+function readLocalValue(key: string, fallback: any) {
+  try {
+    if (typeof window === 'undefined') return fallback;
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function estimateBusinessDaysUntil(dateValue: string) {
+  if (!dateValue) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(due.getTime())) return null;
+  if (due < today) return -1;
+  let count = 0;
+  const cursor = new Date(today);
+  while (cursor < due) {
+    cursor.setDate(cursor.getDate() + 1);
+    const weekday = cursor.getDay();
+    if (weekday !== 0 && weekday !== 6) count += 1;
+  }
+  return count;
+}
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -142,6 +182,23 @@ export default function App() {
   // --- CÓDIGO ORIGINAL INTACTO ---
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardSearch, setDashboardSearch] = useState('');
+  const [agendaSubTab, setAgendaSubTab] = useState('prazos');
+  const [workspaceSubTab, setWorkspaceSubTab] = useState('modelos');
+
+  // Módulos novos: captação, financeiro, documentos, relatórios e configurações.
+  const [leads, setLeads] = useState<any[]>(() => readLocalValue('vm-leads', []));
+  const [leadDraft, setLeadDraft] = useState({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '' });
+  const [financialEntries, setFinancialEntries] = useState<any[]>(() => readLocalValue('vm-financial-entries', []));
+  const [financialDraft, setFinancialDraft] = useState({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
+  const [documents, setDocuments] = useState<any[]>(() => readLocalValue('vm-documents', []));
+  const [documentDraft, setDocumentDraft] = useState({ title: '', client: '', process: '', category: 'Contrato de honorários', fileName: '', dataUrl: '', size: 0 });
+  const [officeSettings, setOfficeSettings] = useState<any>(() => readLocalValue('vm-office-settings', { officeName: 'Valeska Monteiro Advocacia', oab: 'OAB/ES 41.715', email: 'contato@valeskamonteiro.adv.br', phone: '(27) 99752-5314', address: 'Serra / ES', lgpdConsent: false, lgpdAcceptedAt: '' }));
+  const [moduleNotice, setModuleNotice] = useState('');
+
+  useEffect(() => { try { window.localStorage.setItem('vm-leads', JSON.stringify(leads)); } catch { /* armazenamento local limitado */ } }, [leads]);
+  useEffect(() => { try { window.localStorage.setItem('vm-financial-entries', JSON.stringify(financialEntries)); } catch { /* armazenamento local limitado */ } }, [financialEntries]);
+  useEffect(() => { try { window.localStorage.setItem('vm-documents', JSON.stringify(documents)); } catch { /* armazenamento local limitado */ } }, [documents]);
+  useEffect(() => { try { window.localStorage.setItem('vm-office-settings', JSON.stringify(officeSettings)); } catch { /* armazenamento local limitado */ } }, [officeSettings]);
   
   // Dynamic Month State (Default: October 2026)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1));
@@ -501,6 +558,72 @@ export default function App() {
 
   const moveTask = (taskId, status) => setTasks(prev => prev.map(task => task.id === taskId ? { ...task, status } : task));
 
+  const handleAddLead = (e) => {
+    e.preventDefault();
+    if (!leadDraft.name.trim()) { window.alert('Informe o nome do potencial cliente.'); return; }
+    const item = { ...leadDraft, id: `lead-${Date.now()}`, estimatedValue: Number(leadDraft.estimatedValue || 0), createdAt: new Date().toISOString() };
+    setLeads(prev => [item, ...prev]);
+    setLeadDraft({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '' });
+    setModuleNotice('Lead cadastrado no funil.');
+  };
+
+  const handleAddFinancialEntry = (e) => {
+    e.preventDefault();
+    if (!financialDraft.title.trim() || Number(financialDraft.amount) <= 0) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
+    const item = { ...financialDraft, id: `fin-${Date.now()}`, amount: Number(financialDraft.amount || 0), createdAt: new Date().toISOString() };
+    setFinancialEntries(prev => [item, ...prev]);
+    setFinancialDraft({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
+    setModuleNotice('Lançamento financeiro cadastrado.');
+  };
+
+  const handleDocumentFile = (file) => {
+    if (!file) return;
+    if (file.size > 1024 * 1024) { window.alert('Para manter o armazenamento local do navegador estável, selecione um arquivo de até 1 MB. Para documentos maiores, conecte um armazenamento seguro como Supabase Storage.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => setDocumentDraft(prev => ({ ...prev, fileName: file.name, dataUrl: String(reader.result || ''), size: file.size }));
+    reader.onerror = () => window.alert('Não foi possível ler este arquivo. Tente novamente.');
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddDocument = (e) => {
+    e.preventDefault();
+    if (!documentDraft.title.trim() || !documentDraft.fileName || !documentDraft.dataUrl) { window.alert('Informe o título e selecione o arquivo.'); return; }
+    const item = { ...documentDraft, id: `doc-${Date.now()}`, createdAt: new Date().toISOString() };
+    setDocuments(prev => [item, ...prev]);
+    setDocumentDraft({ title: '', client: '', process: '', category: 'Contrato de honorários', fileName: '', dataUrl: '', size: 0 });
+    setModuleNotice('Documento salvo neste navegador. Faça backups regulares.');
+  };
+
+  const downloadBackup = () => {
+    const backup = { version: 1, exportedAt: new Date().toISOString(), processes, clients, deadlines, scannedPush, templates, tasks, leads, financialEntries, documents, officeSettings };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `backup-advocacia-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    setModuleNotice('Backup exportado. Guarde-o em local seguro.');
+  };
+
+  const handleImportBackup = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!data || typeof data !== 'object') throw new Error('Formato inválido');
+      if (Array.isArray(data.processes)) setProcesses(data.processes);
+      if (Array.isArray(data.clients)) setClients(data.clients);
+      if (Array.isArray(data.deadlines)) setDeadlines(data.deadlines);
+      if (Array.isArray(data.scannedPush)) setScannedPush(data.scannedPush);
+      if (Array.isArray(data.templates)) setTemplates(data.templates);
+      if (Array.isArray(data.tasks)) setTasks(data.tasks);
+      if (Array.isArray(data.leads)) setLeads(data.leads);
+      if (Array.isArray(data.financialEntries)) setFinancialEntries(data.financialEntries);
+      if (Array.isArray(data.documents)) setDocuments(data.documents);
+      if (data.officeSettings && typeof data.officeSettings === 'object') setOfficeSettings(data.officeSettings);
+      setModuleNotice('Backup importado. Confira os dados antes de continuar.');
+    } catch { window.alert('Não foi possível importar o backup. Selecione um JSON exportado por este sistema.'); }
+    e.target.value = '';
+  };
+
   const handleRunScan = () => {
     setIsScanning(true);
     setTimeout(() => {
@@ -786,22 +909,23 @@ export default function App() {
           {/* Nav Items */}
           <nav className="p-3 space-y-1">
             {[
-              { id: 'dashboard', label: 'Dashboard Executivo', icon: Briefcase },
-              { id: 'push', label: 'Varredura & Push', icon: Search },
-              { id: 'processes', label: 'Gestão de Processos', icon: FileText },
+              { id: 'dashboard', label: 'Dashboard', icon: Briefcase },
+              { id: 'processes', label: 'Processos', icon: FileText },
+              { id: 'agenda', label: 'Prazos e Agenda', icon: CalendarIcon },
+              { id: 'tasks', label: 'Tarefas', icon: ClipboardList },
               { id: 'crm', label: 'Clientes (CRM)', icon: Users },
-              { id: 'agenda', label: 'Agenda de Prazos', icon: CalendarIcon },
-              { id: 'tasks', label: 'Tarefas', icon: Briefcase },
-              { id: 'templates', label: 'Modelos de Peças', icon: Copy },
-              { id: 'finances', label: 'Apuração de Verbas', icon: DollarSign },
-              { id: 'calculadoras', label: 'Calculadoras Jurídicas', icon: Calculator }
+              { id: 'leads', label: 'Captação', icon: UserPlus },
+              { id: 'finances', label: 'Financeiro', icon: Wallet },
+              { id: 'documents', label: 'Documentos', icon: FolderOpen },
+              { id: 'workspace', label: 'Modelos e Calculadoras', icon: Copy },
+              { id: 'reports', label: 'Relatórios', icon: BarChart3 }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => { setActiveTab(tab.id); setModuleNotice(''); if (tab.id === 'agenda') setAgendaSubTab('prazos'); if (tab.id === 'workspace') setWorkspaceSubTab('modelos'); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold transition ${
                     isActive ? 'shadow-md font-bold' : 'hover:bg-white/10'
                   }`}
@@ -823,6 +947,14 @@ export default function App() {
         <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
           <p className="font-semibold">Serra / ES • OAB/ES</p>
           <p className="opacity-60 mt-0.5 mb-3">Sistema Advocacia v2.5</p>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('settings'); setModuleNotice(''); }}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold mb-2 border transition"
+            style={{ color: isDarkMode ? '#F9FAFB' : '#FFFFFF', backgroundColor: activeTab === 'settings' ? PALETTE.bordoPrincipal : 'transparent', borderColor: `${PALETTE.dourado}70` }}
+          >
+            <Settings size={14} /> Configurações
+          </button>
           <button 
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition"
@@ -869,6 +1001,25 @@ export default function App() {
 
         {/* Dynamic Tab Body */}
         <div className="p-6 flex-1 overflow-y-auto">
+          {activeTab === 'agenda' && (
+            <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              {[{ id: 'prazos', label: 'Prazos e intimações' }, { id: 'agenda', label: 'Agenda' }, { id: 'varredura', label: 'Varredura e sincronização' }].map(item => (
+                <button key={item.id} onClick={() => setAgendaSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: agendaSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: agendaSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {activeTab === 'workspace' && (
+            <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              {[{ id: 'modelos', label: 'Modelos de peças' }, { id: 'calculadoras', label: 'Calculadoras jurídicas' }, { id: 'verbas', label: 'Apuração de verbas' }].map(item => (
+                <button key={item.id} onClick={() => setWorkspaceSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: workspaceSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: workspaceSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {moduleNotice && ['leads', 'finances', 'documents', 'settings'].includes(activeTab) && <div role="status" className="mb-4 p-3 rounded-xl border text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.valoresReceber }}>{moduleNotice}</div>}
           {/* TAB 1: DASHBOARD EXECUTIVO — layout inspirado no painel de referência */}
           {activeTab === 'dashboard' && (
             <div className="space-y-4 md:space-y-5" style={{ color: PALETTE.textoPrincipal }}>
@@ -1057,7 +1208,7 @@ export default function App() {
                       ))}
                       {!dashboardRecentNotifications.length && !tasks.length && <p className="text-xs py-3" style={{ color: PALETTE.textoApoio }}>Ainda não há movimentações registradas.</p>}
                     </div>
-                    <button type="button" onClick={() => setActiveTab('push')} className="mt-3 text-[10px] font-semibold hover:underline" style={{ color: PALETTE.bordoPrincipal }}>Ver varredura e notificações</button>
+                    <button type="button" onClick={() => { setActiveTab('agenda'); setAgendaSubTab('varredura'); }} className="mt-3 text-[10px] font-semibold hover:underline" style={{ color: PALETTE.bordoPrincipal }}>Ver varredura e notificações</button>
                   </section>
                 </div>
               </div>
@@ -1065,8 +1216,38 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 2: VARREDURA & PUSH */}
-          {activeTab === 'push' && (
+          {/* SUBABA: PRAZOS E INTIMAÇÕES */}
+          {activeTab === 'agenda' && agendaSubTab === 'prazos' && (
+            <div className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
+                <div>
+                  <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Prazos e intimações</h3>
+                  <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Acompanhe vencimentos, urgências e situação de cada compromisso.</p>
+                </div>
+                <button onClick={() => setIsNewDeadlineOpen(true)} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-2 w-fit" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Cadastrar prazo</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[{ label: 'Em aberto', value: deadlines.filter(d => d.status !== 'Finalizado').length }, { label: 'Fatais em aberto', value: deadlines.filter(d => d.type === 'FATAL' && d.status !== 'Finalizado').length }, { label: 'Vencidos', value: deadlines.filter(d => d.status !== 'Finalizado' && d.dueDate < new Date().toISOString().slice(0,10)).length }].map(kpi => <div key={kpi.label} className="rounded-xl border p-3" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}><p className="text-[10px] uppercase tracking-wide font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-1" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
+              </div>
+              <div className="space-y-3">
+                {[...deadlines].sort((a,b) => String(a.dueDate).localeCompare(String(b.dueDate))).map(item => { const businessDays = estimateBusinessDaysUntil(item.dueDate); const overdue = item.status !== 'Finalizado' && item.dueDate < new Date().toISOString().slice(0,10); return (
+                  <button key={item.id} type="button" onClick={() => setSelectedDeadlineModal({ ...item })} className="w-full text-left p-4 rounded-xl border flex flex-col md:flex-row md:items-center md:justify-between gap-3 transition hover:shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: overdue ? PALETTE.descontos : PALETTE.linhasBordas }}>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap gap-2 items-center"><span className="text-[9px] uppercase font-bold px-2 py-1 rounded-full" style={{ backgroundColor: item.type === 'FATAL' ? `${PALETTE.descontos}22` : `${PALETTE.dourado}22`, color: item.type === 'FATAL' ? PALETTE.descontos : PALETTE.dourado }}>{item.type === 'FATAL' ? 'Prazo fatal' : 'Compromisso'}</span><span className="text-[10px] font-semibold" style={{ color: PALETTE.textoApoio }}>{item.dueDate} • {item.dueTime || 'Sem horário'}</span></div>
+                      <h4 className="font-bold text-sm mt-2" style={{ color: PALETTE.textoPrincipal }}>{item.title}</h4>
+                      <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{item.client || 'Cliente não vinculado'} · Processo: {item.process || 'Não informado'} · {item.court || 'Foro não informado'}</p>
+                    </div>
+                    <div className="flex md:flex-col md:items-end gap-2 shrink-0"><span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: item.completed ? '#D1FAE5' : overdue ? '#FEF3C7' : `${PALETTE.valoresReceber}18`, color: item.completed ? '#065F46' : overdue ? '#92400E' : PALETTE.valoresReceber }}>{item.status || 'Pendente'}</span><span className="text-[10px] font-semibold" style={{ color: overdue ? PALETTE.descontos : PALETTE.textoApoio }}>{item.completed ? 'Cumprido' : overdue ? 'Vencido' : businessDays === 0 ? 'Vence hoje' : businessDays === 1 ? '1 dia útil estimado' : `${businessDays} dias úteis estimados`}</span></div>
+                  </button>
+                ); })}
+                {deadlines.length === 0 && <p className="text-center p-8 text-sm" style={{ color: PALETTE.textoApoio }}>Nenhum prazo cadastrado.</p>}
+              </div>
+              <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>A estimativa considera dias de segunda a sexta e não desconta feriados nacionais, estaduais, municipais ou suspensões de expediente. Confirme sempre a contagem do prazo no sistema oficial aplicável.</p>
+            </div>
+          )}
+
+          {/* TAB: VARREDURA, agora dentro de Prazos e Agenda */}
+          {activeTab === 'agenda' && agendaSubTab === 'varredura' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
@@ -1239,7 +1420,7 @@ export default function App() {
           )}
 
           {/* TAB 5: AGENDA DE PRAZOS */}
-          {activeTab === 'agenda' && (
+          {activeTab === 'agenda' && agendaSubTab === 'agenda' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
@@ -1397,7 +1578,7 @@ export default function App() {
           )}
 
           {/* TAB 6: MODELOS DE PEÇAS */}
-          {activeTab === 'templates' && (
+          {activeTab === 'workspace' && workspaceSubTab === 'modelos' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
@@ -1494,7 +1675,90 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 7: FINANCEIRO */}
+          {/* MÓDULO: CAPTAÇÃO / FUNIL DE LEADS */}
+          {activeTab === 'leads' && (
+            <div className="space-y-5">
+              <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div><h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Captação de clientes</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Acompanhe cada contato desde a primeira consulta até a contratação ou perda da oportunidade.</p></div>
+                <form onSubmit={handleAddLead} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input required placeholder="Nome do potencial cliente" aria-label="Nome do potencial cliente" value={leadDraft.name} onChange={e => setLeadDraft(p => ({ ...p, name: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <input placeholder="Telefone" aria-label="Telefone do lead" value={leadDraft.phone} onChange={e => setLeadDraft(p => ({ ...p, phone: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <input type="email" placeholder="E-mail" aria-label="E-mail do lead" value={leadDraft.email} onChange={e => setLeadDraft(p => ({ ...p, email: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <select aria-label="Área jurídica" value={leadDraft.area} onChange={e => setLeadDraft(p => ({ ...p, area: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option>Família</option><option>Trabalhista</option><option>Cível</option><option>Previdenciário</option><option>Consumidor</option><option>Outra área</option></select>
+                  <select aria-label="Origem do contato" value={leadDraft.source} onChange={e => setLeadDraft(p => ({ ...p, source: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option>Indicação</option><option>WhatsApp</option><option>Instagram</option><option>Site</option><option>Google</option><option>Outro</option></select>
+                  <select aria-label="Etapa do funil" value={leadDraft.stage} onChange={e => setLeadDraft(p => ({ ...p, stage: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <option key={stage}>{stage}</option>)}</select>
+                  <input type="number" min="0" step="0.01" placeholder="Valor estimado (R$)" aria-label="Valor estimado" value={leadDraft.estimatedValue} onChange={e => setLeadDraft(p => ({ ...p, estimatedValue: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <input placeholder="Próxima ação (ex.: retornar amanhã)" aria-label="Próxima ação" value={leadDraft.nextAction} onChange={e => setLeadDraft(p => ({ ...p, nextAction: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Cadastrar lead</button></div>
+                </form>
+              </section>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                {['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <div key={stage} className="p-3 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] font-bold" style={{ color: PALETTE.textoApoio }}>{stage}</p><p className="text-2xl font-serif mt-1" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(lead => lead.stage === stage).length}</p></div>)}
+              </div>
+              <section className="space-y-3">
+                {leads.map(lead => <article key={lead.id} className="p-4 rounded-xl border flex flex-col lg:flex-row lg:items-center justify-between gap-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                  <div className="min-w-0"><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{lead.name}</h4><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{lead.area} · {lead.source} {lead.phone ? `· ${lead.phone}` : ''} {lead.email ? `· ${lead.email}` : ''}</p>{lead.nextAction && <p className="text-[11px] mt-1" style={{ color: PALETTE.textoApoio }}>Próxima ação: {lead.nextAction}</p>}</div>
+                  <div className="flex flex-wrap items-center gap-2">{Number(lead.estimatedValue) > 0 && <span className="text-xs font-bold" style={{ color: PALETTE.valoresReceber }}>R$ {Number(lead.estimatedValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}<select aria-label={`Etapa de ${lead.name}`} value={lead.stage} onChange={e => setLeads(prev => prev.map(x => x.id === lead.id ? { ...x, stage: e.target.value } : x))} className="p-2 border rounded-lg text-[10px]" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <option key={stage}>{stage}</option>)}</select><button title="Excluir lead" onClick={() => { if (window.confirm('Excluir este lead?')) setLeads(prev => prev.filter(x => x.id !== lead.id)); }} className="p-2 rounded-lg" style={{ color: PALETTE.descontos }}><Trash2 size={14}/></button></div>
+                </article>)}
+                {leads.length === 0 && <div className="p-8 rounded-xl border text-center" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Nenhum lead cadastrado. Use o formulário acima para registrar a próxima oportunidade.</div>}
+              </section>
+            </div>
+          )}
+
+          {/* MÓDULO: DOCUMENTOS */}
+          {activeTab === 'documents' && (
+            <div className="space-y-5">
+              <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div><h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Documentos do escritório</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Organize arquivos por cliente, processo e categoria.</p></div>
+                <form onSubmit={handleAddDocument} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input required aria-label="Título do documento" placeholder="Título/descrição" value={documentDraft.title} onChange={e => setDocumentDraft(p => ({ ...p, title: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <select aria-label="Categoria do documento" value={documentDraft.category} onChange={e => setDocumentDraft(p => ({ ...p, category: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{['Contrato de honorários','Procuração','Declaração de hipossuficiência','Documento pessoal','Comprovante','Petição','Decisão','Outro'].map(cat => <option key={cat}>{cat}</option>)}</select>
+                  <select aria-label="Cliente vinculado" value={documentDraft.client} onChange={e => setDocumentDraft(p => ({ ...p, client: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option value="">Sem cliente vinculado</option>{clients.map(cli => <option key={cli.id} value={cli.name}>{cli.name}</option>)}</select>
+                  <select aria-label="Processo vinculado" value={documentDraft.process} onChange={e => setDocumentDraft(p => ({ ...p, process: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option value="">Sem processo vinculado</option>{processes.map(proc => <option key={proc.id} value={proc.number}>{proc.number} · {proc.client}</option>)}</select>
+                  <div className="md:col-span-2"><label className="block text-xs font-bold mb-1" style={{ color: PALETTE.textoPrincipal }}>Arquivo (até 1 MB)</label><input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => handleDocumentFile(e.target.files?.[0])} className="w-full p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }} />{documentDraft.fileName && <p className="text-[10px] mt-1" style={{ color: PALETTE.valoresReceber }}>Selecionado: {documentDraft.fileName} ({Math.max(1, Math.round(documentDraft.size / 1024))} KB)</p>}</div>
+                  <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><FileUp size={14}/> Salvar documento</button></div>
+                </form>
+              </section>
+              <section className="space-y-3">
+                {documents.map(doc => <article key={doc.id} className="p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><div className="min-w-0"><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{doc.title}</h4><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{doc.category} · {doc.fileName} · {doc.client || 'Sem cliente'} {doc.process ? `· Processo ${doc.process}` : ''}</p><p className="text-[10px] mt-1" style={{ color: PALETTE.textoApoio }}>Adicionado em {new Date(doc.createdAt).toLocaleDateString('pt-BR')}</p></div><div className="flex items-center gap-2"><a href={doc.dataUrl} download={doc.fileName} className="px-3 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><Download size={13}/> Baixar</a><button title="Excluir documento" onClick={() => { if (window.confirm('Excluir este documento?')) setDocuments(prev => prev.filter(x => x.id !== doc.id)); }} className="p-2" style={{ color: PALETTE.descontos }}><Trash2 size={14}/></button></div></article>)}
+                {documents.length === 0 && <p className="p-8 text-center rounded-xl border text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Nenhum documento cadastrado.</p>}
+              </section>
+              <p className="text-[10px] p-3 rounded-lg" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>Atenção: nesta versão, os arquivos ficam no armazenamento local do navegador, não em repositório jurídico centralizado. Para documentos sigilosos e uso por vários dispositivos, conecte o módulo ao Supabase Storage com controle de acesso, políticas de segurança e backup.</p>
+            </div>
+          )}
+
+          {/* MÓDULO: RELATÓRIOS */}
+          {activeTab === 'reports' && (
+            <div className="space-y-5">
+              <div><h3 className="font-serif font-bold text-xl" style={{ color: PALETTE.textoPrincipal }}>Relatórios gerenciais</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Indicadores calculados a partir dos registros disponíveis no sistema.</p></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Leads convertidos', value: leads.filter(l => l.stage === 'Contratado').length }, { label: 'Conversão do funil', value: `${leads.length ? Math.round(leads.filter(l => l.stage === 'Contratado').length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Processos por área</h4>{dashboardAreaData.map(row => <div key={row.label} className="space-y-1"><div className="flex justify-between text-xs" style={{ color: PALETTE.textoPrincipal }}><span>{row.label}</span><strong>{row.count}</strong></div><div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${processes.length ? row.count / Math.max(1, processes.length) * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div></div>)}</section>
+                <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Resumo financeiro por status</h4>{['Recebido','Pendente','Atrasado','Pago'].map(status => { const amount = financialEntries.filter(e => e.status === status).reduce((sum,e) => sum + Number(e.amount || 0), 0); return <div key={status} className="flex justify-between py-2 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{status}</span><strong>R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></div>; })}</section>
+              </div>
+              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Funil de captação</h4>{['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <div key={stage} className="flex items-center gap-3"><span className="w-36 text-xs" style={{ color: PALETTE.textoPrincipal }}>{stage}</span><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${leads.length ? leads.filter(l => l.stage === stage).length / leads.length * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div><strong className="w-6 text-right text-xs" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(l => l.stage === stage).length}</strong></div>)}</section>
+            </div>
+          )}
+
+          {/* MÓDULO: CONFIGURAÇÕES DO ESCRITÓRIO */}
+          {activeTab === 'settings' && (
+            <div className="max-w-3xl space-y-5">
+              <div><h3 className="font-serif font-bold text-xl" style={{ color: PALETTE.textoPrincipal }}>Configurações do escritório</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Dados institucionais, preferência visual, consentimento e cópia de segurança.</p></div>
+              <form onSubmit={e => { e.preventDefault(); setModuleNotice('Configurações salvas neste navegador.'); }} className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Dados do escritório</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[{ key: 'officeName', label: 'Nome do escritório' }, { key: 'oab', label: 'OAB' }, { key: 'email', label: 'E-mail' }, { key: 'phone', label: 'Telefone' }, { key: 'address', label: 'Endereço / comarca' }].map(field => <label key={field.key} className="text-xs font-semibold space-y-1" style={{ color: PALETTE.textoPrincipal }}><span>{field.label}</span><input value={officeSettings[field.key] || ''} onChange={e => setOfficeSettings(prev => ({ ...prev, [field.key]: e.target.value }))} className="w-full p-2.5 border rounded-lg font-normal" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} /></label>)}
+                </div>
+                <label className="flex items-start gap-3 p-3 rounded-xl border text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><input type="checkbox" checked={Boolean(officeSettings.lgpdConsent)} onChange={e => setOfficeSettings(prev => ({ ...prev, lgpdConsent: e.target.checked, lgpdAcceptedAt: e.target.checked ? new Date().toISOString() : '' }))} /><span><strong>Registro de ciência do aviso de privacidade e tratamento de dados.</strong><br/>Este controle interno registra a ciência no navegador; não substitui o aviso de privacidade, base legal, contrato de operador ou demais medidas exigidas pela LGPD.</span></label>
+                <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={toggleTheme} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>{isDarkMode ? <Sun size={13}/> : <Moon size={13}/>} Alternar tema</button><button type="submit" className="px-4 py-2 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar configurações</button></div>
+              </form>
+              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Backup e restauração</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>Exporte os registros para um arquivo JSON ou restaure um backup anterior. Guarde o arquivo de forma segura: ele pode conter dados pessoais e informações confidenciais.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={downloadBackup} className="px-4 py-2 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Download size={14}/> Exportar backup</button><button type="button" onClick={() => document.getElementById('vm-backup-import')?.click()} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><Upload size={14}/> Importar backup</button><input id="vm-backup-import" type="file" accept="application/json,.json" className="hidden" onChange={handleImportBackup}/></div><p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os dados já existentes podem continuar apenas no estado da aplicação; faça o backup antes de atualizar o código. O armazenamento permanente e multiusuário precisa ser configurado no backend.</p></section>
+            </div>
+          )}
+
+          {/* TAB: FINANCEIRO */}
           {activeTab === 'finances' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -1510,55 +1774,45 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Saldo em Conta</span>
-                  <p className="text-xl font-bold font-mono text-emerald-800">R$ 148.500,00</p>
+                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.valoresReceber }}>R$ {(financialEntries.filter(x => x.kind === 'Receita' && x.status === 'Recebido').reduce((sum, x) => sum + Number(x.amount || 0), 0) - financialEntries.filter(x => x.kind === 'Despesa' && x.status === 'Pago').reduce((sum, x) => sum + Number(x.amount || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Projeção 30/60/90d</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>R$ 210.800,00</p>
+                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>R$ {financialEntries.filter(x => x.kind === 'Receita' && x.status === 'Pendente').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Taxa Inadimplência</span>
-                  <p className="text-xl font-bold font-mono text-amber-800">4,2% (R$ 3.100)</p>
+                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.descontos }}>R$ {financialEntries.filter(x => x.status === 'Atrasado').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Honorários a Receber</span>
-                  <p className="text-xl font-bold font-mono text-emerald-700">R$ 69.390,00</p>
+                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.valoresReceber }}>R$ {financialEntries.filter(x => x.kind === 'Receita' && x.status === 'Pendente').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                 </div>
               </div>
 
-              {/* 2. Seleção de Processo para Apuração */}
-              <div className="p-4 rounded-xl border bg-white shadow-sm space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
-                <label className="font-bold text-xs block" style={{ color: PALETTE.textoPrincipal }}>
-                  Selecionar Processo para Apuração e Prestação de Contas
-                </label>
-                <select
-                  value={selectedVerbasProcId}
-                  onChange={(e) => setSelectedVerbasProcId(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl font-bold text-xs bg-amber-50 cursor-pointer"
-                  style={{ borderColor: PALETTE.dourado }}
-                >
-                  {processes.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.number} • {p.client} ({p.action})
-                    </option>
-                  ))}
-                </select>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
-                  <div className="p-3 rounded-lg border bg-amber-50/50" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="block text-[10px] font-bold text-slate-500">VALOR TOTAL DA CAUSA</span>
-                    <input aria-label="Valor total da causa" type="number" value={selectedVerbasProc.value ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, value: Number(e.target.value) } : p))} className="w-full mt-1 p-1.5 border rounded font-mono text-sm font-bold text-slate-800" />
-                  </div>
-                  <div className="p-3 rounded-lg border bg-emerald-50/50" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="block text-[10px] font-bold text-emerald-700">HONORÁRIOS CONTRATADOS</span>
-                    <input aria-label="Honorários contratados" type="number" value={selectedVerbasProc.honorarios ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, honorarios: Number(e.target.value) } : p))} className="w-full mt-1 p-1.5 border rounded font-mono text-sm font-bold text-emerald-900" />
-                  </div>
-                  <div className="p-3 rounded-lg border bg-rose-50/50" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="block text-[10px] font-bold text-rose-700">DESCONTOS E CUSTAS</span>
-                    <input aria-label="Descontos e custas" type="number" value={selectedVerbasProc.descontos ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, descontos: Number(e.target.value) } : p))} className="w-full mt-1 p-1.5 border rounded font-mono text-sm font-bold text-rose-900" />
-                  </div>
+              <section className="p-4 rounded-xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="border-b pb-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Lançamentos financeiros</h4>
+                  <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Registre honorários, parcelas, custas e despesas. Os valores abaixo ficam salvos neste navegador.</p>
                 </div>
-              </div>
+                <form onSubmit={handleAddFinancialEntry} className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input required aria-label="Descrição do lançamento" placeholder="Descrição do lançamento" value={financialDraft.title} onChange={e => setFinancialDraft(p => ({ ...p, title: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                  <select aria-label="Tipo de lançamento" value={financialDraft.kind} onChange={e => setFinancialDraft(p => ({ ...p, kind: e.target.value, status: e.target.value === 'Receita' ? 'Pendente' : 'Pendente' }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Receita</option><option>Despesa</option></select>
+                  <select aria-label="Categoria" value={financialDraft.category} onChange={e => setFinancialDraft(p => ({ ...p, category: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Honorários</option><option>Custas processuais</option><option>Despesas operacionais</option><option>Consultoria</option><option>Outros</option></select>
+                  <input aria-label="Cliente" placeholder="Cliente (opcional)" value={financialDraft.client} onChange={e => setFinancialDraft(p => ({ ...p, client: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                  <input required min="0.01" step="0.01" type="number" aria-label="Valor" placeholder="Valor em R$" value={financialDraft.amount} onChange={e => setFinancialDraft(p => ({ ...p, amount: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                  <input type="date" aria-label="Vencimento" value={financialDraft.dueDate} onChange={e => setFinancialDraft(p => ({ ...p, dueDate: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                  <select aria-label="Status financeiro" value={financialDraft.status} onChange={e => setFinancialDraft(p => ({ ...p, status: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select>
+                  <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Adicionar lançamento</button></div>
+                </form>
+                <div className="space-y-2">
+                  {financialEntries.map(entry => <div key={entry.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
+                    <div className="min-w-0"><p className="text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>{entry.title}</p><p className="text-[10px] mt-1" style={{ color: PALETTE.textoApoio }}>{entry.kind} · {entry.category} {entry.client ? `· ${entry.client}` : ''} {entry.dueDate ? `· Vencimento ${entry.dueDate}` : ''}</p></div>
+                    <div className="flex items-center gap-3"><span className="text-xs font-bold" style={{ color: entry.kind === 'Receita' ? PALETTE.valoresReceber : PALETTE.descontos }}>{entry.kind === 'Despesa' ? '− ' : '+ '}R$ {Number(entry.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span><select aria-label="Alterar status do lançamento" value={entry.status} onChange={e => setFinancialEntries(prev => prev.map(x => x.id === entry.id ? { ...x, status: e.target.value } : x))} className="text-[10px] p-1.5 border rounded" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select><button type="button" title="Excluir lançamento" onClick={() => { if (window.confirm('Excluir este lançamento financeiro?')) setFinancialEntries(prev => prev.filter(x => x.id !== entry.id)); }} className="p-1" style={{ color: PALETTE.descontos }}><Trash2 size={13}/></button></div>
+                  </div>)}
+                  {financialEntries.length === 0 && <p className="text-xs text-center py-6" style={{ color: PALETTE.textoApoio }}>Nenhum lançamento cadastrado. Use o formulário acima para registrar receitas e despesas.</p>}
+                </div>
+              </section>
             </div>
           )}
 
@@ -1617,8 +1871,50 @@ export default function App() {
             </div>
           )}
 
+          {/* SUBABA: APURAÇÃO DE VERBAS POR PROCESSO */}
+          {activeTab === 'workspace' && workspaceSubTab === 'verbas' && (
+            <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              <div className="border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
+                <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Apuração de verbas por processo</h3>
+                <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Consulte e edite valores da causa, honorários contratados e descontos/custas diretamente na ficha do processo selecionado.</p>
+              </div>
+              {processes.length > 0 ? (
+                <>
+                  <div className="p-4 rounded-xl border space-y-3" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
+                    <label className="font-bold text-xs block" style={{ color: PALETTE.textoPrincipal }}>
+                      Selecionar processo
+                    </label>
+                    <select value={selectedVerbasProcId} onChange={(e) => setSelectedVerbasProcId(e.target.value)} className="w-full p-2.5 border rounded-xl font-bold text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}>
+                      {processes.map((p) => <option key={p.id} value={p.id}>{p.number} • {p.client} ({p.action})</option>)}
+                    </select>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                      <label className="p-3 rounded-lg border block" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}>
+                        <span className="block text-[10px] font-bold uppercase" style={{ color: PALETTE.textoApoio }}>Valor total da causa (R$)</span>
+                        <input aria-label="Valor total da causa" type="number" min="0" step="0.01" value={selectedVerbasProc?.value ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, value: Number(e.target.value) } : p))} className="w-full mt-2 p-2 border rounded font-mono text-sm font-bold" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                      </label>
+                      <label className="p-3 rounded-lg border block" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}>
+                        <span className="block text-[10px] font-bold uppercase" style={{ color: PALETTE.valoresReceber }}>Honorários contratados (R$)</span>
+                        <input aria-label="Honorários contratados" type="number" min="0" step="0.01" value={selectedVerbasProc?.honorarios ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, honorarios: Number(e.target.value) } : p))} className="w-full mt-2 p-2 border rounded font-mono text-sm font-bold" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                      </label>
+                      <label className="p-3 rounded-lg border block" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}>
+                        <span className="block text-[10px] font-bold uppercase" style={{ color: PALETTE.descontos }}>Descontos e custas (R$)</span>
+                        <input aria-label="Descontos e custas" type="number" min="0" step="0.01" value={selectedVerbasProc?.descontos ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, descontos: Number(e.target.value) } : p))} className="w-full mt-2 p-2 border rounded font-mono text-sm font-bold" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>Valor da causa</p><p className="text-xl font-bold mt-2" style={{ color: PALETTE.textoPrincipal }}>{Number(selectedVerbasProc?.value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
+                    <div className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>Honorários</p><p className="text-xl font-bold mt-2" style={{ color: PALETTE.valoresReceber }}>{Number(selectedVerbasProc?.honorarios || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
+                    <div className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>Saldo estimado após descontos</p><p className="text-xl font-bold mt-2" style={{ color: PALETTE.textoPrincipal }}>{(Number(selectedVerbasProc?.value || 0) - Number(selectedVerbasProc?.descontos || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
+                  </div>
+                  <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os valores alterados são atualizados no estado do sistema e refletem nos indicadores do painel. A persistência definitiva no banco depende da integração existente do projeto.</p>
+                </>
+              ) : <p className="text-xs py-8 text-center" style={{ color: PALETTE.textoApoio }}>Cadastre um processo antes de apurar os valores.</p>}
+            </div>
+          )}
+
           {/* TAB 8: CALCULADORAS JURÍDICAS */}
-          {activeTab === 'calculadoras' && (
+          {activeTab === 'workspace' && workspaceSubTab === 'calculadoras' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
