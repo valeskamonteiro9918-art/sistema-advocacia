@@ -141,6 +141,7 @@ export default function App() {
 
   // --- CÓDIGO ORIGINAL INTACTO ---
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [dashboardSearch, setDashboardSearch] = useState('');
   
   // Dynamic Month State (Default: October 2026)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1));
@@ -561,6 +562,46 @@ export default function App() {
   const categories = ['Todas', ...Array.from(new Set(templates.map((t) => t.category)))];
   const filteredTemplates = selectedCategory === 'Todas' ? templates : templates.filter((t) => t.category === selectedCategory);
 
+  // --- INDICADORES E LISTAS DINÂMICAS DO DASHBOARD ---
+  const dashboardToday = new Date();
+  dashboardToday.setHours(0, 0, 0, 0);
+  const dashboardInSevenDays = new Date(dashboardToday);
+  dashboardInSevenDays.setDate(dashboardInSevenDays.getDate() + 7);
+  const dashboardSearchTerm = dashboardSearch.trim().toLocaleLowerCase('pt-BR');
+  const dashboardActiveDeadlines = deadlines.filter((item) => !item.completed && item.status !== 'Finalizado' && item.dueDate);
+  const dashboardNextWeekCount = dashboardActiveDeadlines.filter((item) => {
+    const date = new Date(`${item.dueDate}T00:00:00`);
+    return date >= dashboardToday && date <= dashboardInSevenDays;
+  }).length;
+  const dashboardAudiencesThisMonth = deadlines.filter((item) => {
+    if (!String(item.title || '').toLocaleLowerCase('pt-BR').includes('audiência') || !item.dueDate) return false;
+    const date = new Date(`${item.dueDate}T00:00:00`);
+    return date.getMonth() === dashboardToday.getMonth() && date.getFullYear() === dashboardToday.getFullYear();
+  }).length;
+  const dashboardVisibleDeadlines = [...deadlines]
+    .filter((item) => {
+      if (!dashboardSearchTerm) return true;
+      return [item.title, item.client, item.process, item.court].some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(dashboardSearchTerm));
+    })
+    .sort((a, b) => new Date(`${a.dueDate || '2999-12-31'}T00:00:00`).getTime() - new Date(`${b.dueDate || '2999-12-31'}T00:00:00`).getTime())
+    .slice(0, 5);
+  const dashboardUpcomingAgenda = [...dashboardActiveDeadlines]
+    .filter((item) => new Date(`${item.dueDate}T00:00:00`) >= dashboardToday || item.type === 'FATAL')
+    .sort((a, b) => new Date(`${a.dueDate}T00:00:00`).getTime() - new Date(`${b.dueDate}T00:00:00`).getTime())
+    .slice(0, 3);
+  const dashboardChartProcesses = [...processes]
+    .sort((a, b) => Number(b.honorarios || 0) - Number(a.honorarios || 0))
+    .slice(0, 6);
+  const dashboardChartMax = Math.max(1, ...dashboardChartProcesses.map((item) => Number(item.value || item.honorarios || 0)));
+  const dashboardAreaData = [
+    { label: 'Trabalhista', count: processes.filter((item) => /trabalh|reclama|horas extras/i.test(`${item.action || ''} ${item.court || ''}`)).length },
+    { label: 'Cível / Família', count: processes.filter((item) => /c[ií]vel|fam[ií]lia|alimentos|guarda|indeniza|monit[oó]ria|jec/i.test(`${item.action || ''} ${item.court || ''}`)).length },
+    { label: 'Outras áreas', count: processes.filter((item) => !/trabalh|reclama|horas extras|c[ií]vel|fam[ií]lia|alimentos|guarda|indeniza|monit[oó]ria|jec/i.test(`${item.action || ''} ${item.court || ''}`)).length }
+  ].filter((item) => item.count > 0 || processes.length === 0);
+  const dashboardAreaMax = Math.max(1, ...dashboardAreaData.map((item) => item.count));
+  const dashboardRecentNotifications = [...scannedPush].slice(0, 3);
+  const dashboardDateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
   // --- TELA DE LOGIN (BLOQUEIA O ACESSO SE NÃO TIVER LOGADO) ---
   if (!session) {
     return (
@@ -828,231 +869,199 @@ export default function App() {
 
         {/* Dynamic Tab Body */}
         <div className="p-6 flex-1 overflow-y-auto">
-          {/* TAB 1: DASHBOARD EXECUTIVO */}
+          {/* TAB 1: DASHBOARD EXECUTIVO — layout inspirado no painel de referência */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-6">
-              {/* Top Filter & Sync Bar */}
-              <div className="p-4 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
-                      Painel Executivo
-                    </span>
-                    <span className="text-xs font-mono font-semibold" style={{ color: PALETTE.valoresReceber }}>
-                      • Conectado via API (Sync Ativo)
-                    </span>
-                  </div>
-                  <h3 className="font-serif font-bold text-lg mt-1" style={{ color: PALETTE.textoPrincipal }}>
-                    Resumo Operacional, Financeiro & Comercial
-                  </h3>
+            <div className="space-y-4 md:space-y-5" style={{ color: PALETTE.textoPrincipal }}>
+              {/* Título e ações rápidas */}
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <h3 className="font-serif text-2xl md:text-[28px] leading-tight" style={{ color: PALETTE.textoPrincipal }}>Painel do escritório</h3>
+                  <p className="mt-1 text-xs capitalize" style={{ color: PALETTE.textoApoio }}>{dashboardDateLabel}</p>
                 </div>
-
-                {/* Quick Filters */}
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <Filter size={14} style={{ color: PALETTE.dourado }} />
-                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
-                      <option>Todos os Clientes / Regiões</option>
-                      <option>Espírito Santo (TJES / TRT17)</option>
-                      <option>Minas Gerais (TJMG)</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <CalendarIcon size={14} style={{ color: PALETTE.dourado }} />
-                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
-                      <option>Este Mês (Out/2026)</option>
-                      <option>Último Trimestre</option>
-                      <option>Ano Atual (2026)</option>
-                    </select>
-                  </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                  <label className="flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs min-w-0 sm:min-w-[260px]" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>
+                    <Search size={14} />
+                    <input
+                      type="search"
+                      value={dashboardSearch}
+                      onChange={(e) => setDashboardSearch(e.target.value)}
+                      placeholder="Buscar processo, cliente ou prazo"
+                      aria-label="Buscar processo, cliente ou prazo no painel"
+                      className="w-full min-w-0 bg-transparent outline-none placeholder:opacity-70"
+                      style={{ color: PALETTE.textoPrincipal }}
+                    />
+                    {dashboardSearch && <button type="button" onClick={() => setDashboardSearch('')} aria-label="Limpar busca" className="shrink-0" style={{ color: PALETTE.textoApoio }}><X size={13} /></button>}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsNewProcessOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:brightness-105"
+                    style={{ backgroundColor: isDarkMode ? '#B83250' : '#C85F79' }}
+                  >
+                    <Plus size={14} /> Novo processo
+                  </button>
                 </div>
               </div>
 
-              {/* BLOCK 1: GESTÃO OPERACIONAL E DE CONTENCIOSO */}
-              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
-                    <Briefcase size={18} style={{ color: PALETTE.textoPrincipal }} /> 1. Gestão Operacional & Contencioso
-                  </h4>
-                  <span className="text-xs font-bold" style={{ color: PALETTE.textoApoio }}>
-                    {processes.length} Processos Ativos
-                  </span>
+              {/* Indicadores principais */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                  <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: PALETTE.textoApoio }}>Processos ativos</div>
+                  <div className="text-3xl font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{processes.filter((item) => !/arquivado|encerrado|baixado/i.test(String(item.status || ''))).length}</div>
+                  <div className="text-[10px] flex items-center gap-1" style={{ color: PALETTE.valoresReceber }}><Briefcase size={11} /> Carteira do escritório</div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {/* Processos por Área */}
-                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Distribuição por Área
-                    </span>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between font-bold">
-                        <span>Cível / JEC:</span>
-                        <span style={{ color: PALETTE.textoPrincipal }}>2 casos (50%)</span>
-                      </div>
-                      <div className="flex justify-between font-bold">
-                        <span>Trabalhista:</span>
-                        <span style={{ color: PALETTE.dourado }}>2 casos (50%)</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Fases Processuais */}
-                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Ciclo de Vida / Fases
-                    </span>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <span>Conhecimento:</span>
-                        <span className="font-mono font-bold">2</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Execução / Sentença:</span>
-                        <span className="font-mono font-bold">2</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Alertas de Prazos */}
-                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-700">
-                      Alertas & Urgências
-                    </span>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between font-bold text-rose-800">
-                        <span>Prazos Fatais:</span>
-                        <span className="font-mono">{deadlines.filter(d => d.type === 'FATAL' && d.status !== 'Finalizado').length}</span>
-                      </div>
-                      <div className="flex justify-between text-amber-800">
-                        <span>Audiências Agendadas:</span>
-                        <span className="font-mono font-bold">1</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Produtividade Interna */}
-                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Produtividade por Patrono
-                    </span>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between font-bold" style={{ color: PALETTE.bordoEscuro }}>
-                        <span>Dra. Valeska Monteiro:</span>
-                        <span className="font-mono">100% da Banca</span>
-                      </div>
-                      <div className="flex justify-between text-[11px]" style={{ color: PALETTE.textoApoio }}>
-                        <span>Demandas no Prazo:</span>
-                        <span className="font-mono font-bold text-emerald-700">100%</span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: isDarkMode ? '#251822' : '#21151C', borderColor: isDarkMode ? '#4B2635' : '#21151C' }}>
+                  <div className="text-[10px] uppercase tracking-[0.12em] font-semibold text-white/75">Prazos nos próximos 7 dias</div>
+                  <div className="text-3xl font-serif leading-none text-white">{dashboardNextWeekCount}</div>
+                  <div className="text-[10px] font-semibold" style={{ color: '#F3C879' }}>{dashboardNextWeekCount ? 'Acompanhe as próximas entregas' : 'Nenhum prazo nos próximos 7 dias'}</div>
+                </div>
+                <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                  <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: PALETTE.textoApoio }}>Audiências no mês</div>
+                  <div className="text-3xl font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{dashboardAudiencesThisMonth}</div>
+                  <div className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Compromissos identificados na agenda</div>
+                </div>
+                <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                  <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: PALETTE.textoApoio }}>Honorários a receber</div>
+                  <div className="text-2xl md:text-[27px] font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{financialTotals.honorarios.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</div>
+                  <div className="text-[10px] font-semibold" style={{ color: PALETTE.valoresReceber }}>Total registrado nos processos</div>
                 </div>
               </div>
 
-              {/* BLOCK 2: INDICADORES FINANCEIROS */}
-              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
-                    <DollarSign size={18} className="text-emerald-700" /> 2. Indicadores Financeiros
-                  </h4>
-                  <span className="text-xs font-mono font-bold text-emerald-800">
-                    Geral Consolidado
-                  </span>
+              {/* Painéis principais: prazos, honorários e agenda */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+                {/* Prazos e intimações */}
+                <section className="lg:col-span-5 rounded-2xl border p-4 md:p-5 min-w-0" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <h4 className="font-serif text-base" style={{ color: PALETTE.textoPrincipal }}>Prazos e intimações</h4>
+                      <p className="text-[10px] mt-0.5" style={{ color: PALETTE.textoApoio }}>Contagem em dias úteis quando cadastrada</p>
+                    </div>
+                    <button type="button" onClick={() => setActiveTab('agenda')} className="text-[10px] font-semibold whitespace-nowrap hover:underline" style={{ color: PALETTE.bordoPrincipal }}>Ver agenda</button>
+                  </div>
+                  <div className="divide-y" style={{ borderColor: PALETTE.linhasBordas }}>
+                    {dashboardVisibleDeadlines.length ? dashboardVisibleDeadlines.map((item) => {
+                      const dueDate = item.dueDate ? new Date(`${item.dueDate}T00:00:00`) : null;
+                      const dueDay = dueDate ? dueDate.toLocaleDateString('pt-BR', { day: '2-digit' }) : '—';
+                      const dueMonth = dueDate ? dueDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase() : 'S/D';
+                      const daysToDue = dueDate ? Math.round((dueDate.getTime() - dashboardToday.getTime()) / 86400000) : null;
+                      const dueLabel = item.completed || item.status === 'Finalizado' ? 'Concluído' : daysToDue === null ? 'Sem data' : daysToDue < 0 ? 'Vencido' : daysToDue === 0 ? 'Hoje' : daysToDue === 1 ? 'Amanhã' : `${daysToDue} dias`;
+                      const dueColor = item.completed || item.status === 'Finalizado' ? PALETTE.valoresReceber : daysToDue !== null && daysToDue < 0 ? PALETTE.descontos : daysToDue !== null && daysToDue <= 1 ? '#C45C77' : '#C49A54';
+                      return (
+                        <button type="button" key={item.id} onClick={() => setSelectedDeadlineModal({ ...item })} className="w-full py-3 flex items-center gap-3 text-left rounded-lg px-1 transition hover:bg-black/[0.025]" style={{ color: PALETTE.textoPrincipal }}>
+                          <span className="w-10 h-11 shrink-0 rounded-lg flex flex-col items-center justify-center" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>
+                            <span className="text-sm font-serif leading-none">{dueDay}</span>
+                            <span className="text-[8px] font-semibold mt-1">{dueMonth}</span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-bold leading-snug truncate">{item.title}</span>
+                            <span className="block text-[10px] mt-1 truncate" style={{ color: PALETTE.textoApoio }}>{item.client || 'Cliente não informado'}{item.process ? ` · Proc. ${item.process}` : ''}</span>
+                          </span>
+                          <span className="shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold" style={{ backgroundColor: `${dueColor}20`, color: dueColor }}>{dueLabel}</span>
+                        </button>
+                      );
+                    }) : (
+                      <div className="py-10 text-center text-xs" style={{ color: PALETTE.textoApoio }}>{dashboardSearch ? 'Nenhum prazo corresponde à busca.' : 'Nenhum prazo cadastrado.'}</div>
+                    )}
+                  </div>
+                  <button type="button" onClick={() => setIsNewDeadlineOpen(true)} className="mt-3 w-full rounded-xl border px-3 py-2.5 text-xs font-semibold transition hover:brightness-95" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.bordoPrincipal }}>+ Cadastrar prazo ou compromisso</button>
+                </section>
+
+                {/* Honorários e distribuição por área */}
+                <div className="lg:col-span-4 flex flex-col gap-3 min-w-0">
+                  <section className="rounded-2xl border p-4 md:p-5 min-w-0" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                    <div className="mb-3">
+                      <h4 className="font-serif text-base" style={{ color: PALETTE.textoPrincipal }}>Honorários por processo</h4>
+                      <p className="text-[10px] mt-0.5" style={{ color: PALETTE.textoApoio }}>Comparativo do valor da causa e honorários cadastrados</p>
+                    </div>
+                    {dashboardChartProcesses.length ? (
+                      <>
+                        <div className="h-[132px] flex items-end justify-around gap-2 px-1 border-b" style={{ borderColor: PALETTE.linhasBordas }}>
+                          {dashboardChartProcesses.map((item, index) => {
+                            const causeValue = Number(item.value || 0);
+                            const feesValue = Number(item.honorarios || 0);
+                            const causeHeight = Math.max(5, Math.round((causeValue / dashboardChartMax) * 100));
+                            const feesHeight = Math.max(5, Math.round((feesValue / dashboardChartMax) * 100));
+                            const label = String(item.client || item.number || `Caso ${index + 1}`).trim().split(/\s+/)[0].slice(0, 8);
+                            return (
+                              <div key={item.id} className="flex flex-col items-center justify-end h-full min-w-0 flex-1 gap-1">
+                                <div className="flex items-end justify-center gap-1 h-[108px] w-full">
+                                  <div title={`Valor da causa: ${causeValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="rounded-t-sm w-3 max-w-[35%]" style={{ height: `${causeHeight}%`, backgroundColor: '#C85F79', minHeight: 4 }} />
+                                  <div title={`Honorários: ${feesValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="rounded-t-sm w-3 max-w-[35%]" style={{ height: `${feesHeight}%`, backgroundColor: '#D8C5A4', minHeight: 4 }} />
+                                </div>
+                                <span className="text-[8px] sm:text-[9px] truncate max-w-full" style={{ color: PALETTE.textoApoio }}>{label}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[9px]" style={{ color: PALETTE.textoApoio }}>
+                          <span className="inline-flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#C85F79' }} />Valor da causa</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#D8C5A4' }} />Honorários</span>
+                        </div>
+                      </>
+                    ) : <div className="py-8 text-center text-xs" style={{ color: PALETTE.textoApoio }}>Cadastre processos para visualizar o comparativo.</div>}
+                  </section>
+
+                  <section className="rounded-2xl border p-4 md:p-5" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                    <h4 className="font-serif text-base" style={{ color: PALETTE.textoPrincipal }}>Processos por área</h4>
+                    <p className="text-[10px] mt-0.5 mb-3" style={{ color: PALETTE.textoApoio }}>{processes.length} processos na carteira</p>
+                    <div className="space-y-3">
+                      {dashboardAreaData.map((area) => (
+                        <div key={area.label} className="grid grid-cols-[minmax(78px,1fr)_minmax(70px,1.4fr)_22px] gap-2 items-center">
+                          <span className="text-[10px] truncate" style={{ color: PALETTE.textoPrincipal }}>{area.label}</span>
+                          <span className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.fundoPagina }}><span className="block h-full rounded-full" style={{ width: `${Math.max(6, (area.count / dashboardAreaMax) * 100)}%`, backgroundColor: '#C85F79' }} /></span>
+                          <span className="text-[10px] font-bold text-right" style={{ color: PALETTE.textoPrincipal }}>{area.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Contingenciamento Total sob Risco
-                    </span>
-                    <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>
-                      R$ {financialTotals.causa.toLocaleString('pt-BR')}
-                    </p>
-                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
-                      <p>• Risco Provável (Ganho Estimado): <span className="font-bold text-emerald-800">75%</span></p>
-                      <p>• Risco Possível / Neutro: <span className="font-bold text-amber-700">25%</span></p>
+                {/* Agenda e atividade recente */}
+                <div className="lg:col-span-3 flex flex-col gap-3 min-w-0">
+                  <section className="rounded-2xl border p-4 md:p-5" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                    <div className="mb-3">
+                      <h4 className="font-serif text-base" style={{ color: PALETTE.textoPrincipal }}>Agenda da semana</h4>
+                      <p className="text-[10px] mt-0.5" style={{ color: PALETTE.textoApoio }}>Audiências e atendimentos</p>
                     </div>
-                  </div>
+                    <div className="space-y-1">
+                      {dashboardUpcomingAgenda.length ? dashboardUpcomingAgenda.map((item) => {
+                        const date = new Date(`${item.dueDate}T00:00:00`);
+                        return (
+                          <button type="button" key={item.id} onClick={() => setSelectedDeadlineModal({ ...item })} className="w-full flex items-start gap-2.5 py-2.5 border-b last:border-b-0 text-left rounded-md hover:bg-black/[0.025]" style={{ borderColor: PALETTE.linhasBordas }}>
+                            <span className="w-9 h-10 shrink-0 rounded-lg flex flex-col items-center justify-center" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}><span className="font-serif text-sm leading-none">{date.toLocaleDateString('pt-BR', { day: '2-digit' })}</span><span className="text-[8px] mt-1">{date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase()}</span></span>
+                            <span className="min-w-0 flex-1"><span className="block text-[10px] font-bold leading-snug">{item.title}</span><span className="block text-[9px] mt-1 truncate" style={{ color: PALETTE.textoApoio }}>{item.dueTime || 'Horário não informado'} · {item.court || item.client || 'Compromisso'}</span></span>
+                          </button>
+                        );
+                      }) : <div className="py-5 text-center text-xs" style={{ color: PALETTE.textoApoio }}>Agenda livre. Cadastre um compromisso para exibi-lo aqui.</div>}
+                    </div>
+                    <button type="button" onClick={() => setActiveTab('agenda')} className="mt-2 text-[10px] font-semibold hover:underline" style={{ color: PALETTE.bordoPrincipal }}>Abrir agenda completa</button>
+                  </section>
 
-                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block text-emerald-800">
-                      Honorários Contratados / A Receber
-                    </span>
-                    <p className="text-xl font-bold font-mono text-emerald-800">
-                      R$ {financialTotals.honorarios.toLocaleString('pt-BR')}
-                    </p>
-                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
-                      <p>• Faturado / Recebido no Mês: <span className="font-bold text-emerald-800">R$ 10.500</span></p>
-                      <p>• A Receber Futuro: <span className="font-bold" style={{ color: PALETTE.textoPrincipal }}>R$ 58.820</span></p>
+                  <section className="rounded-2xl border p-4 md:p-5 min-w-0" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                    <div className="mb-3">
+                      <h4 className="font-serif text-base" style={{ color: PALETTE.textoPrincipal }}>Atividade recente</h4>
+                      <p className="text-[10px] mt-0.5" style={{ color: PALETTE.textoApoio }}>Últimas movimentações registradas</p>
                     </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.descontos }}>
-                      Custos Operacionais e Despesas
-                    </span>
-                    <p className="text-xl font-bold font-mono text-rose-800">
-                      R$ {financialTotals.descontos.toLocaleString('pt-BR')}
-                    </p>
-                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
-                      <p>• Custas Reembolsáveis: <span className="font-bold">R$ 2.700</span></p>
-                      <p>• Despesas Operacionais: <span className="font-bold">R$ 1.800</span></p>
+                    <div className="space-y-3">
+                      {dashboardRecentNotifications.map((item) => (
+                        <div key={item.id} className="border-b pb-2.5 last:border-b-0 last:pb-0" style={{ borderColor: PALETTE.linhasBordas }}>
+                          <div className="flex items-start justify-between gap-2"><span className="text-[10px] font-bold" style={{ color: PALETTE.textoPrincipal }}>Intimação recebida</span><span className="rounded-full px-2 py-0.5 text-[8px] font-semibold shrink-0" style={{ backgroundColor: isDarkMode ? '#4B2635' : '#F8DDE4', color: isDarkMode ? '#F9A8B8' : '#9F3150' }}>Nova</span></div>
+                          <p className="text-[9px] mt-1 leading-snug" style={{ color: PALETTE.textoApoio }}>Proc. {item.process} · {item.date}</p>
+                        </div>
+                      ))}
+                      {tasks.slice(0, Math.max(0, 3 - dashboardRecentNotifications.length)).map((task) => (
+                        <div key={task.id} className="border-b pb-2.5 last:border-b-0 last:pb-0" style={{ borderColor: PALETTE.linhasBordas }}>
+                          <div className="flex items-start justify-between gap-2"><span className="text-[10px] font-bold" style={{ color: PALETTE.textoPrincipal }}>{task.title}</span><span className="rounded-full px-2 py-0.5 text-[8px] font-semibold shrink-0" style={{ backgroundColor: task.status === 'Concluída' ? `${PALETTE.valoresReceber}20` : `${PALETTE.dourado}20`, color: task.status === 'Concluída' ? PALETTE.valoresReceber : PALETTE.dourado }}>{task.status}</span></div>
+                          <p className="text-[9px] mt-1" style={{ color: PALETTE.textoApoio }}>{task.dueDate ? `Prazo: ${new Date(`${task.dueDate}T00:00:00`).toLocaleDateString('pt-BR')}` : 'Tarefa sem data definida'}</p>
+                        </div>
+                      ))}
+                      {!dashboardRecentNotifications.length && !tasks.length && <p className="text-xs py-3" style={{ color: PALETTE.textoApoio }}>Ainda não há movimentações registradas.</p>}
                     </div>
-                  </div>
+                    <button type="button" onClick={() => setActiveTab('push')} className="mt-3 text-[10px] font-semibold hover:underline" style={{ color: PALETTE.bordoPrincipal }}>Ver varredura e notificações</button>
+                  </section>
                 </div>
               </div>
-
-              {/* BLOCK 3: COMERCIAL E ATENDIMENTO (CRM) */}
-              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
-                    <Users size={18} style={{ color: PALETTE.dourado }} /> 3. Comercial & Atendimento (CRM)
-                  </h4>
-                  <span className="text-xs font-bold text-emerald-800">
-                    Captação Ativa
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Taxa de Conversão de Contratos
-                    </span>
-                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.textoPrincipal }}>
-                      68%
-                    </p>
-                    <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>
-                      Consultas Iniciais convertidas em contratos
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Tempo Médio de Resposta ao Lead
-                    </span>
-                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.dourado }}>
-                      18 min
-                    </p>
-                    <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>
-                      Atendimento rápido via WhatsApp / Email
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
-                      Custo de Aquisição de Cliente (CAC)
-                    </span>
-                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.textoPrincipal }}>
-                      R$ 145,00
-                    </p>
-                    <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>
-                      Investimento médio por novo cliente captado
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <p className="text-[9px] text-right" style={{ color: PALETTE.textoApoio }}>Indicadores calculados a partir dos dados cadastrados neste sistema.</p>
             </div>
           )}
 
