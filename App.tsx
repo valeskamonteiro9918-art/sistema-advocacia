@@ -1481,9 +1481,9 @@ export default function App() {
                     <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Quadro de Tarefas</h3>
                     <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Organize atividades por etapa, prioridade e prazo. Arraste os cartões entre as colunas.</p>
                   </div>
-                  <form onSubmit={addTask} className="flex gap-2 w-full md:w-auto">
-                    <input value={taskDraft} onChange={e => setTaskDraft(e.target.value)} placeholder="Nome da nova tarefa..." aria-label="Nome da nova tarefa" required className="flex-1 md:w-64 p-2.5 border rounded-xl text-xs bg-white" style={{ borderColor: PALETTE.linhasBordas }} />
-                    <button type="button" onClick={() => addTask()} disabled={!taskDraft.trim()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
+                  <form onSubmit={e => { e.preventDefault(); addTask(); }} className="flex gap-2 w-full md:w-auto">
+                    <input value={taskDraft} onChange={e => setTaskDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } }} placeholder="Nome da nova tarefa..." aria-label="Nome da nova tarefa" className="flex-1 md:w-64 p-2.5 border rounded-xl text-xs bg-white" style={{ borderColor: PALETTE.linhasBordas }} />
+                    <button type="button" onClick={() => addTask()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
                   </form>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
