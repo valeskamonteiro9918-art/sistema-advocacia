@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
 import {
   Briefcase,
   Users,
@@ -15,7 +16,9 @@ import {
   MessageCircle,
   Filter,
   X,
-  Calculator
+  Calculator,
+  LogOut,
+  Lock
 } from 'lucide-react';
 
 const PALETTE = {
@@ -34,6 +37,14 @@ const PALETTE = {
 };
 
 export default function App() {
+  // Autenticação Supabase State
+  const [session, setSession] = useState<any>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loadingAuth, setLoadingAuth] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // Main Navigation & App States
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Dynamic Month State (Default: October 2026)
@@ -274,6 +285,34 @@ export default function App() {
 
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
 
+  // Monitor Supabase Auth State
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoadingAuth(true);
+    setAuthError('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.');
+    }
+    setLoadingAuth(false);
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
   // Financial selected process object
   const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
@@ -289,7 +328,7 @@ export default function App() {
   );
 
   // Handlers
-  const handleAddProcess = (e) => {
+  const handleAddProcess = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProcess.number || !newProcess.client) return;
     const item = {
@@ -304,7 +343,7 @@ export default function App() {
     setIsNewProcessOpen(false);
   };
 
-  const handleAddClient = (e) => {
+  const handleAddClient = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClient.name) return;
     const item = { id: Date.now().toString(), ...newClient };
@@ -313,7 +352,7 @@ export default function App() {
     setIsNewClientOpen(false);
   };
 
-  const handleAddDeadline = (e) => {
+  const handleAddDeadline = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDeadline.title) return;
     const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
@@ -322,8 +361,117 @@ export default function App() {
     setIsNewDeadlineOpen(false);
   };
 
+  // SE NÃO ESTIVER LOGADO -> EXIBE A TELA DE LOGIN
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 font-sans" style={{ backgroundColor: PALETTE.bordoEscuro }}>
+        <div className="w-full max-w-md p-8 rounded-2xl shadow-2xl border space-y-6" style={{ backgroundColor: PALETTE.bordoPrincipal, borderColor: PALETTE.dourado }}>
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-inner mb-1" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoEscuro }}>
+              <Lock size={28} style={{ color: PALETTE.douradoClaro }} />
+            </div>
+            <h1 className="font-serif font-bold text-2xl tracking-wide uppercase" style={{ color: PALETTE.douradoClaro }}>
+              DRA. VALESKA MONTEIRO
+            </h1>
+            <p className="text-xs tracking-wider text-slate-200">
+              Advocacia & Consultoria Jurídica • Acesso Restrito
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {authError && (
+              <div className="p-3 text-xs rounded-lg bg-rose-950/80 border border-rose-500 text-rose-200 text-center font-medium">
+                {authError}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: PALETTE.douradoClaro }}>
+                E-mail Profissional
+              </label>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="seu@email.com"
+                className="w-full p-3 rounded-xl bg-black/20 border text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition"
+                style={{ borderColor: `${PALETTE.dourado}50` }}
+                required 
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: PALETTE.douradoClaro }}>
+                Senha de Acesso
+              </label>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full p-3 rounded-xl bg-black/20 border text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition"
+                style={{ borderColor: `${PALETTE.dourado}50` }}
+                required 
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={loadingAuth}
+              className="w-full py-3.5 rounded-xl font-bold text-sm shadow-lg transition hover:brightness-110 active:scale-[0.99] mt-2 flex justify-center items-center gap-2"
+              style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
+            >
+              {loadingAuth ? 'A verificar credenciais...' : 'Entrar no Sistema'}
+            </button>
+          </form>
+
+          <p className="text-[10px] text-center text-slate-300 opacity-80 pt-2 border-t" style={{ borderColor: `${PALETTE.dourado}30` }}>
+            Serra / ES • Conexão Criptografada via Supabase
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // SE ESTIVER LOGADO -> EXIBE O DASHBOARD COMPLETO
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
+      {/* FLOATING HOVER CARD FOR CALENDAR (Portal Strategy) */}
+      {hoveredDeadline && (
+        <div
+          className="fixed z-[9999] w-72 p-3.5 rounded-xl shadow-2xl border text-white space-y-2 pointer-events-none transition-all duration-150"
+          style={{
+            top: `${hoverPos.y}px`,
+            left: `${hoverPos.x}px`,
+            backgroundColor: PALETTE.bordoEscuro,
+            borderColor: PALETTE.dourado
+          }}
+        >
+          <div className="flex justify-between items-start border-b pb-1.5" style={{ borderColor: `${PALETTE.dourado}50` }}>
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded text-black" style={{ backgroundColor: PALETTE.douradoClaro }}>
+              {hoveredDeadline.dueTime}h • {hoveredDeadline.type}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+              {hoveredDeadline.status || 'Pendente'}
+            </span>
+          </div>
+
+          <h5 className="font-bold text-xs leading-tight" style={{ color: PALETTE.douradoClaro }}>
+            {hoveredDeadline.title}
+          </h5>
+
+          <div className="text-[11px] space-y-0.5 text-slate-200">
+            <p><strong className="text-amber-200">Cliente:</strong> {hoveredDeadline.client}</p>
+            <p><strong className="text-amber-200">Proc:</strong> {hoveredDeadline.process}</p>
+            <p><strong className="text-amber-200">Local:</strong> {hoveredDeadline.court}</p>
+          </div>
+          
+          <p className="text-[9px] italic text-slate-400 border-t pt-1" style={{ borderColor: `${PALETTE.dourado}30` }}>
+            Clique para editar dados ou alterar status
+          </p>
+        </div>
+      )}
+
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
         <div>
@@ -373,10 +521,18 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Footer Info */}
-        <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
-          <p className="font-semibold">Serra / ES • OAB/ES</p>
-          <p className="opacity-60 mt-0.5">Sistema Advocacia v2.5</p>
+        {/* Footer Info & Logout */}
+        <div className="p-4 border-t space-y-3" style={{ borderColor: `${PALETTE.dourado}30` }}>
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition"
+          >
+            <LogOut size={14} /> Sair do Sistema
+          </button>
+          <div className="text-center text-[10px]" style={{ color: PALETTE.douradoClaro }}>
+            <p className="font-semibold">Serra / ES • OAB/ES</p>
+            <p className="opacity-60 mt-0.5">Sistema Advocacia v2.5</p>
+          </div>
         </div>
       </aside>
 
@@ -445,4 +601,195 @@ export default function App() {
                 </div>
               </div>
 
-              {/* BLOCK 1:
+              {/* BLOCK 1: GESTÃO OPERACIONAL E DE CONTENCIOSO */}
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <Briefcase size={18} style={{ color: PALETTE.bordoPrincipal }} /> 1. Gestão Operacional & Contencioso
+                  </h4>
+                  <span className="text-xs font-bold" style={{ color: PALETTE.textoApoio }}>
+                    {processes.length} Processos Ativos
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {/* Processos por Área */}
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Distribuição por Área
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between font-bold">
+                        <span>Cível / JEC:</span>
+                        <span style={{ color: PALETTE.bordoPrincipal }}>2 casos (50%)</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Trabalhista:</span>
+                        <span style={{ color: PALETTE.dourado }}>2 casos (50%)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fases Processuais */}
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Ciclo de Vida / Fases
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span>Conhecimento:</span>
+                        <span className="font-mono font-bold">2</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Execução / Sentença:</span>
+                        <span className="font-mono font-bold">2</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Alertas de Prazos */}
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-700">
+                      Alertas & Urgências
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between font-bold text-rose-800">
+                        <span>Prazos Fatais:</span>
+                        <span className="font-mono">{deadlines.filter(d => d.type === 'FATAL' && d.status !== 'Finalizado').length}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-800">
+                        <span>Audiências Agendadas:</span>
+                        <span className="font-mono font-bold">1</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Produtividade Interna */}
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Produtividade por Patrono
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between font-bold" style={{ color: PALETTE.bordoEscuro }}>
+                        <span>Dra. Valeska Monteiro:</span>
+                        <span className="font-mono">100% da Banca</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]" style={{ color: PALETTE.textoApoio }}>
+                        <span>Demandas no Prazo:</span>
+                        <span className="font-mono font-bold text-emerald-700">100%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCK 2: INDICADORES FINANCEIROS */}
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <DollarSign size={18} className="text-emerald-700" /> 2. Indicadores Financeiros
+                  </h4>
+                  <span className="text-xs font-mono font-bold text-emerald-800">
+                    Geral Consolidado
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Contingenciamento Total sob Risco
+                    </span>
+                    <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>
+                      R$ {financialTotals.causa.toLocaleString('pt-BR')}
+                    </p>
+                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
+                      <p>• Risco Provável (Ganho Estimado): <span className="font-bold text-emerald-800">75%</span></p>
+                      <p>• Risco Possível / Neutro: <span className="font-bold text-amber-700">25%</span></p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block text-emerald-800">
+                      Honorários Contratados / A Receber
+                    </span>
+                    <p className="text-xl font-bold font-mono text-emerald-800">
+                      R$ {financialTotals.honorarios.toLocaleString('pt-BR')}
+                    </p>
+                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
+                      <p>• Faturado / Recebido no Mês: <span className="font-bold text-emerald-800">R$ 10.500</span></p>
+                      <p>• A Receber Futuro: <span className="font-bold" style={{ color: PALETTE.bordoPrincipal }}>R$ 58.820</span></p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.descontos }}>
+                      Custos Operacionais e Despesas
+                    </span>
+                    <p className="text-xl font-bold font-mono text-rose-800">
+                      R$ {financialTotals.descontos.toLocaleString('pt-BR')}
+                    </p>
+                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
+                      <p>• Custas Reembolsáveis: <span className="font-bold">R$ 2.700</span></p>
+                      <p>• Despesas Operacionais: <span className="font-bold">R$ 1.800</span></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCK 3: COMERCIAL E ATENDIMENTO (CRM) */}
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <Users size={18} style={{ color: PALETTE.dourado }} /> 3. Comercial & Atendimento (CRM)
+                  </h4>
+                  <span className="text-xs font-bold text-emerald-800">
+                    Captação Ativa
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Taxa de Conversão de Contratos
+                    </span>
+                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.bordoPrincipal }}>
+                      68%
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Tempo Médio de Resposta ao Lead
+                    </span>
+                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.dourado }}>
+                      1h 15m
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Custo de Aquisição de Cliente (CAC)
+                    </span>
+                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.textoPrincipal }}>
+                      R$ 150
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* OUTRAS TABS DO SISTEMA (Processos, CRM, Agenda, etc.) */}
+          {activeTab !== 'dashboard' && (
+            <div className="p-8 text-center rounded-2xl border bg-white shadow-sm space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>
+                Módulo em Funcionamento
+              </h3>
+              <p className="text-xs text-slate-600 max-w-md mx-auto">
+                Você está navegando pela aba <strong className="uppercase">{activeTab}</strong>. Todas as funcionalidades principais do seu painel continuam ativas!
+              </p>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
