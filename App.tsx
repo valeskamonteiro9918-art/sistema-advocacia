@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import React, { useState } from 'react';
 import {
   Briefcase,
   Users,
@@ -16,10 +15,7 @@ import {
   MessageCircle,
   Filter,
   X,
-  Calculator,
-  LogOut,
-  Lock,
-  KeyRound
+  Calculator
 } from 'lucide-react';
 
 const PALETTE = {
@@ -38,33 +34,74 @@ const PALETTE = {
 };
 
 export default function App() {
-  // Autenticação Supabase State
-  const [session, setSession] = useState<any>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loadingAuth, setLoadingAuth] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [authSuccess, setAuthSuccess] = useState('');
-  const [isResetMode, setIsResetMode] = useState(false);
-
-  // Main Navigation & App States
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Dynamic Month State
+  // Dynamic Month State (Default: October 2026)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1));
-  const [calendarView, setCalendarView] = useState('grid');
+  const [calendarView, setCalendarView] = useState('grid'); // 'grid' | 'list'
 
   // Modals & Creation States
   const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
   const [isNewDeadlineOpen, setIsNewDeadlineOpen] = useState(false);
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
 
-  // Filters & Hover States
+  // Scanning simulation state
+  const [isScanning, setIsScanning] = useState(false);
+
+  // Filters
   const [selectedCategory, setSelectedCategory] = useState('Todas');
+
+  // Selected Process for Financials
   const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
+
+  // Mouse hover state for portal popover positioning
   const [hoveredDeadline, setHoveredDeadline] = useState(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+
+  // Selected Deadline state for click-to-edit modal
+  const [selectedDeadlineModal, setSelectedDeadlineModal] = useState(null);
+
+  // Form States
+  const [newProcess, setNewProcess] = useState({
+    number: '',
+    client: '',
+    action: '',
+    court: '',
+    value: '',
+    honorarios: '',
+    descontos: '',
+    status: 'Em andamento'
+  });
+
+  const [newClient, setNewClient] = useState({
+    name: '',
+    type: 'Pessoa Física',
+    document: '',
+    phone: '',
+    email: '',
+    status: 'Ativo'
+  });
+
+  const [newDeadline, setNewDeadline] = useState({
+    title: '',
+    client: '',
+    process: '',
+    dueDate: '2026-10-28',
+    dueTime: '17:00',
+    type: 'FATAL'
+  });
+
+  const [newTemplate, setNewTemplate] = useState({
+    category: 'Cível / JEC',
+    title: '',
+    description: '',
+    content: ''
+  });
+
+  // Calculadoras Sub-tab State
+  const [calcSubTab, setCalcSubTab] = useState('trabalhista');
 
   // Main Data States
   const [processes, setProcesses] = useState([
@@ -114,6 +151,45 @@ export default function App() {
     }
   ]);
 
+  const [clients, setClients] = useState([
+    {
+      id: '1',
+      name: 'Mosaniel Martins da Cruz',
+      type: 'Pessoa Física',
+      document: '123.456.789-00',
+      phone: '27998812233',
+      email: 'mosaniel.cruz@email.com',
+      status: 'Ativo'
+    },
+    {
+      id: '2',
+      name: 'Isabela Ferreira Santos',
+      type: 'Pessoa Física',
+      document: '987.654.321-11',
+      phone: '27997724455',
+      email: 'isabela.ferreira@email.com',
+      status: 'Ativo'
+    },
+    {
+      id: '3',
+      name: 'Jucimara Carvalho Barreto',
+      type: 'Pessoa Física',
+      document: '456.789.123-22',
+      phone: '31991128899',
+      email: 'jucimara.barreto@email.com',
+      status: 'Ativo'
+    },
+    {
+      id: '4',
+      name: 'Estevão dos Santos Pereira',
+      type: 'Pessoa Física',
+      document: '321.654.987-33',
+      phone: '27995541122',
+      email: 'estevao.pereira@email.com',
+      status: 'Ativo'
+    }
+  ]);
+
   const [deadlines, setDeadlines] = useState([
     {
       id: '1',
@@ -138,62 +214,70 @@ export default function App() {
       type: 'NORMAL',
       status: 'Em Andamento',
       completed: false
+    },
+    {
+      id: '3',
+      title: 'Pedido de Cumprimento de Sentença',
+      client: 'Jucimara Carvalho Barreto',
+      process: '1000797-34.2026.8.13.0543',
+      court: 'TJMG Eproc',
+      dueDate: '2026-11-03',
+      dueTime: '18:00',
+      type: 'FATAL',
+      status: 'Pendente',
+      completed: false
     }
   ]);
 
-  // Monitor Supabase Auth State
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoadingAuth(true);
-    setAuthError('');
-    setAuthSuccess('');
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.');
+  const [scannedPush, setScannedPush] = useState([
+    {
+      id: 'p1',
+      date: '2026-10-28',
+      court: 'TJES - Diário Eletrônico',
+      title: 'Intimação para Réplica',
+      process: '5046388-53.2025.8.08.0048',
+      snippet: 'Fica intimada a Dra. Valeska Monteiro para apresentar Réplica no prazo de 15 dias uteis...'
+    },
+    {
+      id: 'p2',
+      date: '2026-10-27',
+      court: 'TRT17 - PJe Push',
+      title: 'Designação de Audiência de Conciliação',
+      process: '0001083-23.2026.5.17.0008',
+      snippet: 'Audiência conciliatória designada para o dia 12/11/2026 às 14:00h...'
     }
-    setLoadingAuth(false);
-  };
+  ]);
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      setAuthError('Por favor, informe seu e-mail para redefinir a senha.');
-      return;
+  const [templates, setTemplates] = useState([
+    {
+      id: '1',
+      category: 'Cível / JEC',
+      title: 'Embargos de Declaração contra Sentença',
+      description: 'Peça para sanar omissão, contradição ou obscuridade em sentença com pedido de efeito modificativo.',
+      content: `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DO JUIZADO ESPECIAL CÍVEL DA COMARCA DE SERRA/ES\n\nProcesso nº: [NÚMERO DO PROCESSO]\n\n[NOME DO CLIENTE], já qualificado(a) nos autos da AÇÃO DE INDENIZAÇÃO, por sua advogada infra-assinada, Dra. Valeska Monteiro, vem, respeitosamente, opor:\n\nEMBARGOS DE DECLARAÇÃO\n\ncom fulcro no art. 1.022 do CPC, em face da r. sentença de fls., pelos fatos e fundamentos a seguir expostos:\n\nI. DA TEMPESTIVIDADE\nA intimação ocorreu em [DATA], encontrando-se tempestiva a presente manifestação.\n\nII. DA OMISSÃO / CONTRADIÇÃO\nA r. sentença embargada incorreu em omissão ao não apreciar o pedido referente a [DESCREVER].\n\nANTE O EXPOSTO, requer o acolhimento destes embargos para sanar o vício apontado.\n\nTermos em que pede deferimento.\nSerra/ES, [DATA].\n\nDra. Valeska Monteiro\nOAB/ES`
+    },
+    {
+      id: '2',
+      category: 'Cível / Execução',
+      title: 'Requerimento de Cumprimento de Sentença',
+      description: 'Petição inicial de cumprimento definitivo de sentença com memória discriminada de cálculo.',
+      content: `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA VARA CÍVEL DA COMARCA DE SERRA/ES\n\nProcesso nº: [NÚMERO DO PROCESSO]\n\n[NOME DO CLIENTE], por sua advogada Dra. Valeska Monteiro, vem requerer o CUMPRIMENTO DEFINITIVO DE SENTENÇA em face de [EXECUTADO], para satisfação do crédito no valor de R$ [VALOR], conforme memória demonstrativa de cálculo anexa.\n\nRequer a intimação do executado para pagamento no prazo de 15 dias, sob pena de multa do art. 523 do CPC.`
+    },
+    {
+      id: '3',
+      category: 'Trabalhista',
+      title: 'Manifestação sobre Citação / Redesignação',
+      description: 'Petição padrão informando andamento de citação e requerendo prosseguimento em audiência.',
+      content: `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DA VARA DO TRABALHO DE VITÓRIA/ES\n\nProcesso nº: [NÚMERO DO PROCESSO]\n\n[NOME DO CLIENTE], por sua advogada Dra. Valeska Monteiro, vem respeitosamente requerer a juntada do comprovante de notificação e o regular prosseguimento do feito.`
     }
+  ]);
 
-    setLoadingAuth(true);
-    setAuthError('');
-    setAuthSuccess('');
+  const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
-    });
+  // Financial selected process object
+  const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
-    if (error) {
-      setAuthError(error.message);
-    } else {
-      setAuthSuccess('Enviamos um e-mail com as instruções para redefinir a senha!');
-    }
-    setLoadingAuth(false);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
+  // Financial Totals Calculation
   const financialTotals = processes.reduce(
     (acc, p) => {
       acc.causa += Number(p.value || 0);
@@ -204,120 +288,46 @@ export default function App() {
     { causa: 0, honorarios: 0, descontos: 0 }
   );
 
-  // TELA DE LOGIN OU REDEFINIÇÃO DE SENHA
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 font-sans" style={{ backgroundColor: PALETTE.bordoEscuro }}>
-        <div className="w-full max-w-md p-8 rounded-2xl shadow-2xl border space-y-6" style={{ backgroundColor: PALETTE.bordoPrincipal, borderColor: PALETTE.dourado }}>
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-inner mb-1" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoEscuro }}>
-              {isResetMode ? (
-                <KeyRound size={28} style={{ color: PALETTE.douradoClaro }} />
-              ) : (
-                <Lock size={28} style={{ color: PALETTE.douradoClaro }} />
-              )}
-            </div>
-            <h1 className="font-serif font-bold text-2xl tracking-wide uppercase" style={{ color: PALETTE.douradoClaro }}>
-              DRA. VALESKA MONTEIRO
-            </h1>
-            <p className="text-xs tracking-wider text-slate-200">
-              {isResetMode ? 'Recuperação de Senha de Acesso' : 'Advocacia & Consultoria Jurídica • Acesso Restrito'}
-            </p>
-          </div>
+  // Handlers
+  const handleAddProcess = (e) => {
+    e.preventDefault();
+    if (!newProcess.number || !newProcess.client) return;
+    const item = {
+      id: Date.now().toString(),
+      ...newProcess,
+      value: Number(newProcess.value || 0),
+      honorarios: Number(newProcess.honorarios || 0),
+      descontos: Number(newProcess.descontos || 0)
+    };
+    setProcesses([item, ...processes]);
+    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento' });
+    setIsNewProcessOpen(false);
+  };
 
-          <form onSubmit={isResetMode ? handleResetPassword : handleLogin} className="space-y-4">
-            {authError && (
-              <div className="p-3 text-xs rounded-lg bg-rose-950/80 border border-rose-500 text-rose-200 text-center font-medium">
-                {authError}
-              </div>
-            )}
+  const handleAddClient = (e) => {
+    e.preventDefault();
+    if (!newClient.name) return;
+    const item = { id: Date.now().toString(), ...newClient };
+    setClients([item, ...clients]);
+    setNewClient({ name: '', type: 'Pessoa Física', document: '', phone: '', email: '', status: 'Ativo' });
+    setIsNewClientOpen(false);
+  };
 
-            {authSuccess && (
-              <div className="p-3 text-xs rounded-lg bg-emerald-950/80 border border-emerald-500 text-emerald-200 text-center font-medium">
-                {authSuccess}
-              </div>
-            )}
+  const handleAddDeadline = (e) => {
+    e.preventDefault();
+    if (!newDeadline.title) return;
+    const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
+    setDeadlines([item, ...deadlines]);
+    setNewDeadline({ title: '', client: '', process: '', dueDate: '2026-10-28', dueTime: '17:00', type: 'FATAL' });
+    setIsNewDeadlineOpen(false);
+  };
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: PALETTE.douradoClaro }}>
-                E-mail Profissional
-              </label>
-              <input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-                className="w-full p-3 rounded-xl bg-black/20 border text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition"
-                style={{ borderColor: `${PALETTE.dourado}50` }}
-                required 
-              />
-            </div>
-
-            {!isResetMode && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider" style={{ color: PALETTE.douradoClaro }}>
-                    Senha de Acesso
-                  </label>
-                  <button 
-                    type="button" 
-                    onClick={() => { setIsResetMode(true); setAuthError(''); setAuthSuccess(''); }}
-                    className="text-[11px] underline hover:text-white transition"
-                    style={{ color: PALETTE.douradoClaro }}
-                  >
-                    Esqueci minha senha
-                  </button>
-                </div>
-                <input 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full p-3 rounded-xl bg-black/20 border text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition"
-                  style={{ borderColor: `${PALETTE.dourado}50` }}
-                  required 
-                />
-              </div>
-            )}
-
-            <button 
-              type="submit" 
-              disabled={loadingAuth}
-              className="w-full py-3.5 rounded-xl font-bold text-sm shadow-lg transition hover:brightness-110 active:scale-[0.99] mt-2 flex justify-center items-center gap-2"
-              style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
-            >
-              {loadingAuth 
-                ? 'A processar...' 
-                : isResetMode 
-                  ? 'Enviar link de redefinição' 
-                  : 'Entrar no Sistema'}
-            </button>
-
-            {isResetMode && (
-              <button 
-                type="button" 
-                onClick={() => { setIsResetMode(false); setAuthError(''); setAuthSuccess(''); }}
-                className="w-full text-center text-xs text-slate-300 underline pt-2 block hover:text-white transition"
-              >
-                Voltar para o login
-              </button>
-            )}
-          </form>
-
-          <p className="text-[10px] text-center text-slate-300 opacity-80 pt-2 border-t" style={{ borderColor: `${PALETTE.dourado}30` }}>
-            Serra / ES • Conexão Criptografada via Supabase
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // PAINEL PRINCIPAL DO SISTEMA
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
-      {/* SIDEBAR */}
+      {/* SIDEBAR NAVIGATION */}
       <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
         <div>
+          {/* Header Monogram */}
           <div className="p-6 text-center border-b" style={{ borderColor: `${PALETTE.dourado}30` }}>
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-md mb-2" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoPrincipal }}>
               <span className="font-serif font-bold text-xl tracking-wider" style={{ color: PALETTE.douradoClaro }}>
@@ -329,6 +339,7 @@ export default function App() {
             </h1>
           </div>
 
+          {/* Nav Items */}
           <nav className="p-3 space-y-1">
             {[
               { id: 'dashboard', label: 'Dashboard Executivo', icon: Briefcase },
@@ -362,22 +373,19 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Rodapé da Barra Lateral (Apenas o Botão de Sair) */}
-        <div className="p-4 border-t" style={{ borderColor: `${PALETTE.dourado}30` }}>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition"
-          >
-            <LogOut size={14} /> Sair do Sistema
-          </button>
+        {/* Footer Info */}
+        <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
+          <p className="font-semibold">Serra / ES • OAB/ES</p>
+          <p className="opacity-60 mt-0.5">Sistema Advocacia v2.5</p>
         </div>
       </aside>
 
-      {/* ÁREA DE CONTEÚDO PRINCIPAL */}
+      {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col min-w-0">
+        {/* Top Header Banner */}
         <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
           <div>
-            <h2 className="font-serif font-bold text-lg text-white">
+            <h2 className="font-serif font-bold text-lg" style={{ color: '#FFFFFF' }}>
               Advocacia & Consultoria Jurídica
             </h2>
             <p className="text-xs" style={{ color: PALETTE.douradoClaro }}>
@@ -394,11 +402,12 @@ export default function App() {
           </button>
         </header>
 
+        {/* Dynamic Tab Body */}
         <div className="p-6 flex-1 overflow-y-auto">
-          {/* DASHBOARD EXECUTIVO COMPLETO */}
+          {/* TAB 1: DASHBOARD EXECUTIVO */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
-              {/* Barra do Topo */}
+              {/* Top Filter & Sync Bar */}
               <div className="p-4 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                 <div>
                   <div className="flex items-center gap-2">
@@ -414,6 +423,7 @@ export default function App() {
                   </h3>
                 </div>
 
+                {/* Quick Filters */}
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
                     <Filter size={14} style={{ color: PALETTE.dourado }} />
@@ -424,4 +434,15 @@ export default function App() {
                     </select>
                   </div>
 
-                  <div className="flex items-center gap-1.5 px-3 py-1.5
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <CalendarIcon size={14} style={{ color: PALETTE.dourado }} />
+                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
+                      <option>Este Mês (Out/2026)</option>
+                      <option>Último Trimestre</option>
+                      <option>Ano Atual (2026)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* BLOCK 1:
