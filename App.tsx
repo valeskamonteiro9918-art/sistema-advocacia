@@ -1861,12 +1861,11 @@ $('wa').onclick=()=>{
  const url='https://wa.me/'+ZAP+'?text='+encodeURIComponent(lastTxt);
  const waWindow=window.open(url,'_blank');
  $('waBox').classList.remove('hide');
- if(!waWindow){
-   toast('O navegador bloqueou a janela. Permita pop-ups ou use o link do WhatsApp na mensagem abaixo.');
-   let fallback=$('waFallbackLink');
-   if(!fallback){fallback=document.createElement('a');fallback.id='waFallbackLink';fallback.style.cssText='display:block;margin-top:8px;color:var(--accent);font-weight:700';$('waBox').appendChild(fallback)}
-   fallback.href=url;fallback.target='_blank';fallback.rel='noopener';fallback.textContent='Abrir WhatsApp com a mensagem pronta';
- }
+ $('waBox').firstChild.textContent='Mensagem preparada para envio. Se o WhatsApp não abriu, clique no link abaixo.';
+ let fallback=$('waFallbackLink');
+ if(!fallback){fallback=document.createElement('a');fallback.id='waFallbackLink';fallback.style.cssText='display:block;margin-top:8px;color:var(--accent);font-weight:700';$('waBox').appendChild(fallback)}
+ fallback.href=url;fallback.target='_blank';fallback.rel='noopener noreferrer';fallback.textContent='Abrir WhatsApp com a mensagem pronta';
+ if(!waWindow)toast('O navegador bloqueou a nova janela. Clique no link “Abrir WhatsApp com a mensagem pronta”.');
 };
 $('bJson').onclick=()=>saveFile(JSON.stringify(state(),null,1),'calculo-trabalhista.json');
 $('bOpen').onclick=()=>$('fOpen').click();
@@ -1898,11 +1897,15 @@ function printPdfFallback(printWindow){
  if(!printWindow || printWindow.closed){toast('O navegador bloqueou a janela de impressão. Permita pop-ups e tente novamente.');return false}
  const escapeHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const lines=texto().split('\\n');
- const body=lines.map(line=>line.trim()?'<p>'+escapeHtml(line.replace(/^\\*|\\*$/g,''))+'</p>':'<div class="space"></div>').join('');
+ const body=lines.map(line=>line.trim()?'<p>'+escapeHtml(line.split('*').join(''))+'</p>':'<div class="space"></div>').join('');
+ const printableHtml='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Simulação trabalhista</title><style>body{font:12px Arial,sans-serif;color:#2a1a20;margin:24mm 18mm}header{background:#7d1f3d;color:#f6efe2;padding:18px;margin:-12mm -6mm 18px}h1{font:bold 20px Georgia;margin:0 0 6px}header p{margin:0;color:#d9bd7e}p{white-space:pre-wrap;line-height:1.45;margin:4px 0}.space{height:7px}.foot{margin-top:28px;border-top:1px solid #d9bd7e;padding-top:8px;font-size:10px}@media print{button{display:none}}</style></head><body><header><h1>VALESKA MONTEIRO</h1><p>Advocacia e Consultoria Jurídica | OAB/ES 41.715</p></header><h2>Simulação de verbas trabalhistas</h2>'+body+'<div class="foot">Estimativa informativa, sujeita à conferência profissional.</div></body></html>';
  printWindow.document.open();
- printWindow.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Simulação trabalhista</title><style>body{font:12px Arial,sans-serif;color:#2a1a20;margin:24mm 18mm}header{background:#7d1f3d;color:#f6efe2;padding:18px;margin:-12mm -6mm 18px}h1{font: bold 20px Georgia;margin:0 0 6px}header p{margin:0;color:#d9bd7e}p{white-space:pre-wrap;line-height:1.45;margin:4px 0}.space{height:7px}.foot{margin-top:28px;border-top:1px solid #d9bd7e;padding-top:8px;font-size:10px}@media print{button{display:none}}</style></head><body><header><h1>VALESKA MONTEIRO</h1><p>Advocacia e Consultoria Jurídica | OAB/ES 41.715</p></header><h2>Simulação de verbas trabalhistas</h2>'+body+'<div class="foot">Estimativa informativa, sujeita à conferência profissional.</div><script>window.onload=function(){setTimeout(function(){window.focus();window.print()},300)};<\\/script></body></html>');
+ printWindow.document.write(printableHtml);
  printWindow.document.close();
- toast('Gerador de PDF externo indisponível. Use “Salvar como PDF” na janela de impressão.');
+ // O print é disparado pelo contexto pai; assim não precisamos embutir outro <script>
+ // no HTML da janela (o que encerrava prematuramente o script da calculadora).
+ setTimeout(()=>{try{printWindow.focus();printWindow.print()}catch(e){toast('A janela abriu, mas não foi possível iniciar a impressão. Use Ctrl+P e escolha Salvar como PDF.')}},500);
+ toast('Prévia pronta. Na janela aberta, escolha Imprimir e depois Salvar como PDF.');
  return true;
 }
 $('pdf').onclick=async()=>{
@@ -1910,8 +1913,9 @@ $('pdf').onclick=async()=>{
  // Abrir a janela ainda dentro do clique do usuário evita bloqueio de pop-up
  // enquanto o gerador de PDF é carregado de forma assíncrona.
  const printWindow=window.open('about:blank','_blank');
- const f=await gerarPdf();
- if(f){if(printWindow&&!printWindow.closed)printWindow.close();saveFile(f.blob,f.name);return}
+ let f=null;
+ try{f=await gerarPdf()}catch(error){toast('O gerador de PDF não respondeu. Abrindo a versão para impressão.')}
+ if(f){if(printWindow&&!printWindow.closed)printWindow.close();await saveFile(f.blob,f.name);return}
  printPdfFallback(printWindow);
 };
 try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{renderMats();syncAviso();update()}}catch(e){renderMats();syncAviso();update()}
