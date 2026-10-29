@@ -19,25 +19,65 @@ import {
   Calculator,
   Lock,
   LogOut,
-  KeyRound
+  KeyRound,
+  Sun,
+  Moon
 } from 'lucide-react';
 
-const PALETTE = {
-  bordoPrincipal: '#7D1F3D',
-  bordoEscuro: '#5F1730',
-  dourado: '#A8843F',
-  douradoClaro: '#D9BD7E',
-  fundoPagina: '#F3ECE0',
-  fundoCartoes: '#FAF6EE',
-  linhasBordas: '#EFE3C8',
-  caixaTotal: '#E3D6C0',
-  textoPrincipal: '#2A1A20',
-  textoApoio: '#7A6A6E',
-  valoresReceber: '#2F7A4F',
-  descontos: '#A33A3A'
+const LIGHT_PALETTE = {
+  bordoPrincipal: '#800020',
+  bordoEscuro: '#581C2B',
+  dourado: '#D97706',
+  douradoClaro: '#F59E0B',
+  fundoPagina: '#F3F4F6',
+  fundoCartoes: '#FFFFFF',
+  linhasBordas: '#E5E7EB',
+  caixaTotal: '#F9FAFB',
+  textoPrincipal: '#111827',
+  textoApoio: '#6B7280',
+  valoresReceber: '#059669',
+  descontos: '#D97706'
+};
+
+const DARK_PALETTE = {
+  bordoPrincipal: '#B83250',
+  bordoEscuro: '#3B0E19',
+  dourado: '#F59E0B',
+  douradoClaro: '#F9FAFB',
+  fundoPagina: '#121820',
+  fundoCartoes: '#1E293B',
+  linhasBordas: '#334155',
+  caixaTotal: '#243244',
+  textoPrincipal: '#F9FAFB',
+  textoApoio: '#9CA3AF',
+  valoresReceber: '#34D399',
+  descontos: '#F59E0B'
 };
 
 export default function App() {
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const PALETTE = isDarkMode ? DARK_PALETTE : LIGHT_PALETTE;
+
+  useEffect(() => {
+    try {
+      setIsDarkMode(window.localStorage.getItem('vm-theme') === 'dark');
+    } catch (error) {
+      // O sistema continua funcionando mesmo quando o navegador bloqueia localStorage.
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    setIsDarkMode((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem('vm-theme', next ? 'dark' : 'light');
+      } catch (error) {
+        // A preferência vale durante esta sessão mesmo sem armazenamento local.
+      }
+      return next;
+    });
+  };
+
   // --- AUTENTICAÇÃO SUPABASE ---
   const [session, setSession] = useState<any>(null);
   const [email, setEmail] = useState('');
@@ -623,7 +663,20 @@ export default function App() {
 
   // --- INTERFACE PRINCIPAL (EXATAMENTE A MESMA DO SEU CÓDIGO) ---
   return (
-    <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
+    <div className={`app-shell min-h-screen flex flex-col md:flex-row font-sans ${isDarkMode ? 'app-dark' : ''}`} style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
+      <style>{`
+        .app-dark .bg-white { background-color: #1E293B !important; }
+        .app-dark input, .app-dark textarea, .app-dark select { background-color: #1E293B !important; color: #F9FAFB !important; border-color: #334155 !important; }
+        .app-shell:not(.app-dark) .text-rose-900, .app-shell:not(.app-dark) .text-rose-800, .app-shell:not(.app-dark) .text-rose-700, .app-shell:not(.app-dark) .text-red-800, .app-shell:not(.app-dark) .text-red-700 { color: #D97706 !important; }
+        .app-shell:not(.app-dark) .text-amber-900, .app-shell:not(.app-dark) .text-amber-800, .app-shell:not(.app-dark) .text-amber-700 { color: #D97706 !important; }
+        .app-dark .text-black, .app-dark .text-slate-900, .app-dark .text-slate-800, .app-dark .text-slate-700, .app-dark .text-gray-900, .app-dark .text-gray-800 { color: #F9FAFB !important; }
+        .app-dark .text-slate-600, .app-dark .text-slate-500, .app-dark .text-gray-600, .app-dark .text-gray-500 { color: #9CA3AF !important; }
+        .app-dark .text-emerald-900, .app-dark .text-emerald-800, .app-dark .text-emerald-700, .app-dark .text-emerald-600 { color: #34D399 !important; }
+        .app-dark .text-rose-900, .app-dark .text-rose-800, .app-dark .text-rose-700, .app-dark .text-red-800, .app-dark .text-red-700 { color: #F59E0B !important; }
+        .app-dark .text-amber-900, .app-dark .text-amber-800, .app-dark .text-amber-700 { color: #F59E0B !important; }
+        .app-dark .border, .app-dark .border-t, .app-dark .border-b, .app-dark .border-r, .app-dark .border-l { border-color: #334155; }
+        .app-dark [class~="hover:bg-black/5"]:hover { background-color: rgba(255,255,255,.07) !important; }
+      `}</style>
       {/* FLOATING HOVER CARD FOR CALENDAR (Portal Strategy) */}
       {hoveredDeadline && (
         <div
@@ -736,13 +789,26 @@ export default function App() {
             </p>
           </div>
 
-          <button
-            onClick={() => setIsNewProcessOpen(true)}
-            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md hover:brightness-110 transition"
-            style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
-          >
-            + Novo Processo
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={isDarkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
+              title={isDarkMode ? 'Ativar modo claro' : 'Ativar modo escuro'}
+              className="px-3 py-2.5 rounded-xl border font-bold text-xs flex items-center gap-2 transition hover:brightness-105"
+              style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}
+            >
+              {isDarkMode ? <Sun size={15} /> : <Moon size={15} />}
+              {isDarkMode ? 'Modo claro' : 'Modo escuro'}
+            </button>
+            <button
+              onClick={() => setIsNewProcessOpen(true)}
+              className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md hover:brightness-110 transition"
+              style={{ backgroundColor: PALETTE.bordoPrincipal, color: '#FFFFFF' }}
+            >
+              + Novo Processo
+            </button>
+          </div>
         </header>
 
         {/* Dynamic Tab Body */}
@@ -792,7 +858,7 @@ export default function App() {
               <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                 <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
                   <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
-                    <Briefcase size={18} style={{ color: PALETTE.bordoPrincipal }} /> 1. Gestão Operacional & Contencioso
+                    <Briefcase size={18} style={{ color: PALETTE.textoPrincipal }} /> 1. Gestão Operacional & Contencioso
                   </h4>
                   <span className="text-xs font-bold" style={{ color: PALETTE.textoApoio }}>
                     {processes.length} Processos Ativos
@@ -808,7 +874,7 @@ export default function App() {
                     <div className="space-y-1.5 text-xs">
                       <div className="flex justify-between font-bold">
                         <span>Cível / JEC:</span>
-                        <span style={{ color: PALETTE.bordoPrincipal }}>2 casos (50%)</span>
+                        <span style={{ color: PALETTE.textoPrincipal }}>2 casos (50%)</span>
                       </div>
                       <div className="flex justify-between font-bold">
                         <span>Trabalhista:</span>
@@ -904,7 +970,7 @@ export default function App() {
                     </p>
                     <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
                       <p>• Faturado / Recebido no Mês: <span className="font-bold text-emerald-800">R$ 10.500</span></p>
-                      <p>• A Receber Futuro: <span className="font-bold" style={{ color: PALETTE.bordoPrincipal }}>R$ 58.820</span></p>
+                      <p>• A Receber Futuro: <span className="font-bold" style={{ color: PALETTE.textoPrincipal }}>R$ 58.820</span></p>
                     </div>
                   </div>
 
@@ -939,7 +1005,7 @@ export default function App() {
                     <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
                       Taxa de Conversão de Contratos
                     </span>
-                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.bordoPrincipal }}>
+                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.textoPrincipal }}>
                       68%
                     </p>
                     <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>
@@ -1007,7 +1073,7 @@ export default function App() {
                           {item.court}
                         </span>
                         <h4 className="font-bold text-sm mt-1" style={{ color: PALETTE.textoPrincipal }}>{item.title}</h4>
-                        <p className="text-xs font-mono" style={{ color: PALETTE.bordoPrincipal }}>Proc: {item.process}</p>
+                        <p className="text-xs font-mono" style={{ color: PALETTE.textoPrincipal }}>Proc: {item.process}</p>
                       </div>
                       <span className="text-xs font-mono font-bold" style={{ color: PALETTE.textoApoio }}>{item.date}</span>
                     </div>
@@ -1064,7 +1130,7 @@ export default function App() {
                   <div key={proc.id} className="p-4 rounded-xl border bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" style={{ borderColor: PALETTE.linhasBordas }}>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold" style={{ color: PALETTE.bordoPrincipal }}>{proc.number}</span>
+                        <span className="font-mono text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>{proc.number}</span>
                         <button onClick={() => setEditingItem({ type: 'process', data: { ...proc } })} className="p-1 hover:bg-black/5 rounded" title="Editar processo">
                           <Pencil size={13} style={{ color: PALETTE.dourado }} />
                         </button>
@@ -1204,13 +1270,13 @@ export default function App() {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center bg-white p-3 rounded-xl border" style={{ borderColor: PALETTE.linhasBordas }}>
                     <button onClick={prevMonth} className="p-1.5 hover:bg-black/5 rounded-lg">
-                      <ChevronLeft size={18} style={{ color: PALETTE.bordoPrincipal }} />
+                      <ChevronLeft size={18} style={{ color: PALETTE.textoPrincipal }} />
                     </button>
                     <h4 className="font-serif font-bold text-base uppercase tracking-wider" style={{ color: PALETTE.bordoEscuro }}>
                       {monthName}
                     </h4>
                     <button onClick={nextMonth} className="p-1.5 hover:bg-black/5 rounded-lg">
-                      <ChevronRight size={18} style={{ color: PALETTE.bordoPrincipal }} />
+                      <ChevronRight size={18} style={{ color: PALETTE.textoPrincipal }} />
                     </button>
                   </div>
 
@@ -1282,7 +1348,7 @@ export default function App() {
                           <span className="font-mono text-xs font-bold px-2 py-0.5 rounded text-white" style={{ backgroundColor: item.type === 'FATAL' ? PALETTE.descontos : PALETTE.dourado }}>
                             {item.type}
                           </span>
-                          <span className="font-mono text-xs font-bold" style={{ color: PALETTE.bordoPrincipal }}>
+                          <span className="font-mono text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>
                             {item.dueDate} às {item.dueTime}h
                           </span>
                         </div>
@@ -1363,7 +1429,7 @@ export default function App() {
                         </span>
                         <h4 className="font-bold text-xs mt-0.5" style={{ color: PALETTE.textoPrincipal }}>{tmpl.title}</h4>
                         <div className="flex gap-2 mt-2">
-                          <button onClick={(e) => { e.stopPropagation(); setNewTemplate({ category: tmpl.category, title: tmpl.title, description: tmpl.description, content: tmpl.content }); setEditingItem({ type: 'template', data: { ...tmpl } }); setIsNewTemplateOpen(true); }} className="text-[10px] font-bold flex items-center gap-1" style={{ color: PALETTE.bordoPrincipal }}><Pencil size={11}/> Editar</button>
+                          <button onClick={(e) => { e.stopPropagation(); setNewTemplate({ category: tmpl.category, title: tmpl.title, description: tmpl.description, content: tmpl.content }); setEditingItem({ type: 'template', data: { ...tmpl } }); setIsNewTemplateOpen(true); }} className="text-[10px] font-bold flex items-center gap-1" style={{ color: PALETTE.textoPrincipal }}><Pencil size={11}/> Editar</button>
                           <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Excluir este modelo de peça?')) { setTemplates(prev => prev.filter(t => t.id !== tmpl.id)); if (selectedTemplate?.id === tmpl.id) setSelectedTemplate(templates.find(t => t.id !== tmpl.id) || null); } }} className="text-[10px] font-bold flex items-center gap-1 text-rose-700"><Trash2 size={11}/> Excluir</button>
                         </div>
                       </div>
@@ -1424,7 +1490,7 @@ export default function App() {
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Projeção 30/60/90d</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.bordoPrincipal }}>R$ 210.800,00</p>
+                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>R$ 210.800,00</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Taxa Inadimplência</span>
@@ -1487,8 +1553,8 @@ export default function App() {
                   </form>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
-                  <button onClick={() => setTaskFilter('Todas')} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: taskFilter === 'Todas' ? PALETTE.bordoPrincipal : '#fff', color: taskFilter === 'Todas' ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>Todas</button>
-                  {['Alta', 'Média', 'Baixa'].map(priority => <button key={priority} onClick={() => setTaskFilter(priority)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: taskFilter === priority ? PALETTE.bordoPrincipal : '#fff', color: taskFilter === priority ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{priority} prioridade</button>)}
+                  <button onClick={() => setTaskFilter('Todas')} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: taskFilter === 'Todas' ? PALETTE.bordoPrincipal : PALETTE.fundoCartoes, color: taskFilter === 'Todas' ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>Todas</button>
+                  {['Alta', 'Média', 'Baixa'].map(priority => <button key={priority} onClick={() => setTaskFilter(priority)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: taskFilter === priority ? PALETTE.bordoPrincipal : PALETTE.fundoCartoes, color: taskFilter === priority ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{priority} prioridade</button>)}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
@@ -1576,7 +1642,7 @@ export default function App() {
                     title="Calculadora Trabalhista"
                     className="w-full h-[900px] border-0"
                     srcDoc={`<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="${isDarkMode ? 'dark' : 'light'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -1584,10 +1650,10 @@ export default function App() {
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-:root{--bg:#f3ece0;--card:#faf6ee;--ink:#2a1a20;--mute:#7a6a6e;--wine:#7d1f3d;--wine2:#5f1730;--gold:#a8843f;--tint:#efe3c8;--line:#e3d6c0;--ok:#2f7a4f;--neg:#a33a3a;--accent:#7d1f3d;
-box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1115;--card:#2a1a20;--ink:#f3ece0;--mute:#b9a6ae;--tint:#3a2a24;--line:#43303a;--ok:#6fcf97;--neg:#ef8d8d;--accent:#e08aa3;--gold:#d9bd7e;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#1d1115;--card:#2a1a20;--ink:#f3ece0;--mute:#b9a6ae;--tint:#3a2a24;--line:#43303a;--ok:#6fcf97;--neg:#ef8d8d;--accent:#e08aa3;--gold:#d9bd7e;color-scheme:dark}
+:root{--bg:#F3F4F6;--card:#FFFFFF;--ink:#111827;--mute:#6B7280;--wine:#800020;--wine2:#581C2B;--gold:#D97706;--tint:#FFF7ED;--line:#E5E7EB;--ok:#059669;--neg:#D97706;--accent:#800020;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121820;--card:#1E293B;--ink:#F9FAFB;--mute:#9CA3AF;--wine:#B83250;--wine2:#3B0E19;--gold:#F59E0B;--tint:#243244;--line:#334155;--ok:#34D399;--neg:#F59E0B;--accent:#B83250;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121820;--card:#1E293B;--ink:#F9FAFB;--mute:#9CA3AF;--wine:#B83250;--wine2:#3B0E19;--gold:#F59E0B;--tint:#243244;--line:#334155;--ok:#34D399;--neg:#F59E0B;--accent:#B83250;color-scheme:dark}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;line-height:1.5}
@@ -1933,7 +1999,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                     title="Calculadora Gasto Mensal da Criança"
                     className="w-full h-[900px] border-0"
                     srcDoc={`<!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="${isDarkMode ? 'dark' : 'light'}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1942,18 +2008,34 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
 
  :root{
- --ink:#2a1a20;
- --ink-soft:#7a6a6e;
- --paper:#f3ece0;
- --paper-alt:#faf6ee;
- --burgundy-900:#5f1730;
- --burgundy-700:#7d1f3d;
- --burgundy-500:#7d1f3d;
- --gold-600:#a8843f;
- --gold-300:#d9bd7e;
- --gold-100:#efe3c8;
- --line:#e3d6c0;
- --green-700:#2f7a4f;
+ --ink:#111827;
+ --ink-soft:#6B7280;
+ --paper:#F3F4F6;
+ --paper-alt:#FFFFFF;
+ --burgundy-900:#581C2B;
+ --burgundy-700:#800020;
+ --burgundy-500:#800020;
+ --gold-600:#D97706;
+ --gold-300:#F59E0B;
+ --gold-100:#E5E7EB;
+ --line:#E5E7EB;
+ --green-700:#059669;
+ color-scheme:light;
+ }
+ :root[data-theme="dark"]{
+ --ink:#F9FAFB;
+ --ink-soft:#9CA3AF;
+ --paper:#121820;
+ --paper-alt:#1E293B;
+ --burgundy-900:#3B0E19;
+ --burgundy-700:#B83250;
+ --burgundy-500:#B83250;
+ --gold-600:#F59E0B;
+ --gold-300:#9CA3AF;
+ --gold-100:#334155;
+ --line:#334155;
+ --green-700:#34D399;
+ color-scheme:dark;
  }
 
  *{box-sizing:border-box;}
@@ -1969,6 +2051,8 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  h1,h2,h3,.serif{font-family:'Playfair Display',serif;}
  a,button,input,textarea,select{font-family:inherit;}
  button{cursor:pointer;}
+ :root[data-theme="dark"] input, :root[data-theme="dark"] textarea, :root[data-theme="dark"] select{background-color:var(--paper-alt);color:var(--ink);border-color:var(--line);}
+ :root[data-theme="dark"] .card, :root[data-theme="dark"] .panel, :root[data-theme="dark"] .box, :root[data-theme="dark"] .item, :root[data-theme="dark"] .summary{background-color:var(--paper-alt);color:var(--ink);border-color:var(--line);}
 
  /* header band */
  .band{
@@ -2988,7 +3072,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  const pensao = computePensao(grand);
 
  return \`<!DOCTYPE html>
-<html lang="pt-BR"><head><meta charset="UTF-8">
+<html lang="pt-BR" data-theme="${isDarkMode ? 'dark' : 'light'}"><head><meta charset="UTF-8">
 <title>Resumo de Gastos - \${escapeHtml(name || 'Criança')}</title>
 <style>
  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
