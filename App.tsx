@@ -36,18 +36,15 @@ const PALETTE = {
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // States para Formulários e Modais
+  // States para Modais
   const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
-  const [isNewClientOpen, setIsNewClientOpen] = useState(false);
-  const [isNewDeadlineOpen, setIsNewDeadlineOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
-  // Filters & State Variables
-  const [selectedCategory, setSelectedCategory] = useState('Todas');
+  // States de Seleção e Filtros
   const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
   const [calcSubTab, setCalcSubTab] = useState('trabalhista');
 
-  // Main Data
+  // Dados Principais do Sistema
   const [processes, setProcesses] = useState([
     {
       id: '1',
@@ -95,7 +92,7 @@ export default function App() {
     }
   ]);
 
-  const [clients, setClients] = useState([
+  const [clients] = useState([
     { id: '1', name: 'Mosaniel Martins da Cruz', type: 'Pessoa Física', document: '123.456.789-00', phone: '27998812233', email: 'mosaniel.cruz@email.com', status: 'Ativo' },
     { id: '2', name: 'Isabela Ferreira Santos', type: 'Pessoa Física', document: '987.654.321-11', phone: '27997724455', email: 'isabela.ferreira@email.com', status: 'Ativo' },
     { id: '3', name: 'Jucimara Carvalho Barreto', type: 'Pessoa Física', document: '456.789.123-22', phone: '31991128899', email: 'jucimara.barreto@email.com', status: 'Ativo' },
@@ -113,12 +110,11 @@ export default function App() {
     { id: 'p2', date: '2026-10-27', court: 'TRT17 - PJe Push', title: 'Designação de Audiência de Conciliação', process: '0001083-23.2026.5.17.0008', snippet: 'Audiência conciliatória designada para o dia 12/11/2026 às 14:00h...' }
   ]);
 
-  const [templates, setTemplates] = useState([
-    { id: '1', category: 'Cível / JEC', title: 'Embargos de Declaração contra Sentença', description: 'Peça para sanar omissão, contradição ou obscuridade em sentença com pedido de efeito modificativo.', content: 'EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO...' },
-    { id: '2', category: 'Cível / Execução', title: 'Requerimento de Cumprimento de Sentença', description: 'Petição inicial de cumprimento definitivo de sentença com memória discriminada de cálculo.', content: 'EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A)...' }
+  const [templates] = useState([
+    { id: '1', category: 'Cível / JEC', title: 'Embargos de Declaração contra Sentença', description: 'Peça para sanar omissão, contradição ou obscuridade em sentença com pedido de efeito modificativo.' },
+    { id: '2', category: 'Cível / Execução', title: 'Requerimento de Cumprimento de Sentença', description: 'Petição inicial de cumprimento definitivo de sentença com memória discriminada de cálculo.' }
   ]);
 
-  const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
   const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
   const financialTotals = processes.reduce(
@@ -147,7 +143,7 @@ export default function App() {
     }, 1200);
   };
 
-  const handleMoveScanToAgenda = (item) => {
+  const handleMoveScanToAgenda = (item: any) => {
     const agendaItem = {
       id: Date.now().toString(),
       title: item.title,
@@ -167,3 +163,250 @@ export default function App() {
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
       {/* SIDEBAR */}
       <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+        <div>
+          <div className="p-6 text-center border-b" style={{ borderColor: `${PALETTE.dourado}30` }}>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-md mb-2" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoPrincipal }}>
+              <span className="font-serif font-bold text-xl tracking-wider" style={{ color: PALETTE.douradoClaro }}>VM</span>
+            </div>
+            <h1 className="font-serif font-bold text-sm tracking-widest uppercase mt-1" style={{ color: PALETTE.douradoClaro }}>
+              DRA. VALESKA MONTEIRO
+            </h1>
+          </div>
+
+          <nav className="p-3 space-y-1">
+            {[
+              { id: 'dashboard', label: 'Dashboard Executivo', icon: Briefcase },
+              { id: 'push', label: 'Varredura & Push', icon: Search },
+              { id: 'processes', label: 'Gestão de Processos', icon: FileText },
+              { id: 'crm', label: 'Clientes (CRM)', icon: Users },
+              { id: 'agenda', label: 'Agenda de Prazos', icon: CalendarIcon },
+              { id: 'templates', label: 'Modelos de Peças', icon: Copy },
+              { id: 'finances', label: 'Apuração de Verbas', icon: DollarSign },
+              { id: 'calculadoras', label: 'Calculadoras Jurídicas', icon: Calculator }
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold transition ${
+                    isActive ? 'shadow-md font-bold' : 'hover:bg-white/5 opacity-80'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? PALETTE.bordoPrincipal : 'transparent',
+                    color: isActive ? '#FFFFFF' : PALETTE.fundoPagina
+                  }}
+                >
+                  <Icon size={16} style={{ color: isActive ? PALETTE.douradoClaro : PALETTE.dourado }} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </aside>
+
+      {/* ÁREA PRINCIPAL */}
+      <main className="flex-1 flex flex-col min-w-0">
+        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+          <div>
+            <h2 className="font-serif font-bold text-lg text-white">Advocacia & Consultoria Jurídica</h2>
+            <p className="text-xs" style={{ color: PALETTE.douradoClaro }}>Dra. Valeska Monteiro • Serra / ES</p>
+          </div>
+          <button
+            onClick={() => setIsNewProcessOpen(true)}
+            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md hover:brightness-110 transition"
+            style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
+          >
+            + Novo Processo
+          </button>
+        </header>
+
+        <div className="p-6 flex-1 overflow-y-auto">
+          {/* DASHBOARD EXECUTIVO */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Painel Executivo</span>
+                  <h3 className="font-serif font-bold text-lg mt-1" style={{ color: PALETTE.textoPrincipal }}>Resumo Operacional, Financeiro & Comercial</h3>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Total de Causa</span>
+                  <p className="text-xl font-bold font-mono">R$ {financialTotals.causa.toLocaleString('pt-BR')}</p>
+                </div>
+                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block text-emerald-800">Honorários Estimados</span>
+                  <p className="text-xl font-bold font-mono text-emerald-800">R$ {financialTotals.honorarios.toLocaleString('pt-BR')}</p>
+                </div>
+                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-800">Despesas / Custas</span>
+                  <p className="text-xl font-bold font-mono text-rose-800">R$ {financialTotals.descontos.toLocaleString('pt-BR')}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VARREDURA & PUSH */}
+          {activeTab === 'push' && (
+            <div className="space-y-6">
+              <div className="p-5 rounded-2xl border bg-white shadow-sm flex justify-between items-center" style={{ borderColor: PALETTE.linhasBordas }}>
+                <div>
+                  <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Varredura de Diários & PJe Push</h3>
+                  <p className="text-xs text-slate-600">Busca automatizada em diários oficiais e sistemas de intimação.</p>
+                </div>
+                <button onClick={handleRunScan} disabled={isScanning} className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow transition" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                  {isScanning ? 'A varrer...' : 'Executar Varredura'}
+                </button>
+              </div>
+              <div className="space-y-3">
+                {scannedPush.map((item) => (
+                  <div key={item.id} className="p-4 rounded-xl border bg-white shadow-sm flex justify-between items-center" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.dourado }}>{item.court}</span>
+                      <h4 className="font-bold text-sm">{item.title}</h4>
+                      <p className="text-xs text-slate-600">{item.snippet}</p>
+                      <p className="text-[10px] font-mono text-slate-400">Processo: {item.process} • {item.date}</p>
+                    </div>
+                    <button onClick={() => handleMoveScanToAgenda(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border hover:bg-slate-50 transition" style={{ borderColor: PALETTE.linhasBordas }}>
+                      Lançar na Agenda
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* GESTÃO DE PROCESSOS */}
+          {activeTab === 'processes' && (
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Acervo de Processos</h3>
+              <div className="grid grid-cols-1 gap-3">
+                {processes.map((p) => (
+                  <div key={p.id} className="p-4 rounded-xl border bg-white shadow-sm flex justify-between items-center" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <div>
+                      <span className="text-xs font-mono font-bold" style={{ color: PALETTE.bordoPrincipal }}>{p.number}</span>
+                      <h4 className="font-bold text-sm mt-0.5">{p.action}</h4>
+                      <p className="text-xs text-slate-600">Cliente: {p.client} • Tribunal: {p.court}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">{p.status}</span>
+                      <p className="text-xs font-mono font-bold mt-1">R$ {p.value.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* CLIENTES (CRM) */}
+          {activeTab === 'crm' && (
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Base de Clientes</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {clients.map((c) => (
+                  <div key={c.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-bold text-sm">{c.name}</h4>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">{c.status}</span>
+                    </div>
+                    <p className="text-xs text-slate-600">Doc: {c.document} • Tel: {c.phone}</p>
+                    <p className="text-xs text-slate-600">E-mail: {c.email}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* AGENDA DE PRAZOS */}
+          {activeTab === 'agenda' && (
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Agenda de Prazos & Audiências</h3>
+              <div className="space-y-3">
+                {deadlines.map((d) => (
+                  <div key={d.id} className="p-4 rounded-xl border bg-white shadow-sm flex justify-between items-center" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white ${d.type === 'FATAL' ? 'bg-rose-700' : 'bg-amber-600'}`}>{d.type}</span>
+                      <h4 className="font-bold text-sm mt-1">{d.title}</h4>
+                      <p className="text-xs text-slate-600">Cliente: {d.client} • Proc: {d.process}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-mono font-bold text-rose-800">{d.dueDate} às {d.dueTime}</p>
+                      <span className="text-xs font-semibold text-slate-500">{d.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* MODELOS DE PEÇAS */}
+          {activeTab === 'templates' && (
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Biblioteca de Modelos</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {templates.map((t) => (
+                  <div key={t.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-2 cursor-pointer hover:border-amber-600 transition" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.dourado }}>{t.category}</span>
+                    <h4 className="font-bold text-sm">{t.title}</h4>
+                    <p className="text-xs text-slate-600">{t.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* APURAÇÃO DE VERBAS */}
+          {activeTab === 'finances' && (
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Apuração de Verbas & Honorários</h3>
+              <div className="p-5 rounded-2xl border bg-white shadow-sm space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                <p className="text-xs text-slate-600">Selecione o processo para visualizar os honorários:</p>
+                <select value={selectedVerbasProcId} onChange={(e) => setSelectedVerbasProcId(e.target.value)} className="w-full p-2.5 rounded-xl border text-xs font-bold" style={{ borderColor: PALETTE.linhasBordas }}>
+                  {processes.map((p) => (
+                    <option key={p.id} value={p.id}>{p.number} - {p.client}</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-3 gap-3 pt-3">
+                  <div className="p-3 rounded-lg bg-slate-50 border text-center" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] uppercase font-bold text-slate-500">Valor da Causa</span>
+                    <p className="text-sm font-mono font-bold">R$ {selectedVerbasProc.value.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-center">
+                    <span className="text-[10px] uppercase font-bold text-emerald-700">Honorários</span>
+                    <p className="text-sm font-mono font-bold text-emerald-800">R$ {selectedVerbasProc.honorarios.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-center">
+                    <span className="text-[10px] uppercase font-bold text-rose-700">Custas</span>
+                    <p className="text-sm font-mono font-bold text-rose-800">R$ {selectedVerbasProc.descontos.toLocaleString('pt-BR')}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CALCULADORAS JURÍDICAS */}
+          {activeTab === 'calculadoras' && (
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Calculadoras Jurídicas</h3>
+              <div className="p-5 rounded-2xl border bg-white shadow-sm space-y-4" style={{ borderColor: PALETTE.linhasBordas }}>
+                <div className="flex gap-2 border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <button onClick={() => setCalcSubTab('trabalhista')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${calcSubTab === 'trabalhista' ? 'text-white' : 'text-slate-600'}`} style={{ backgroundColor: calcSubTab === 'trabalhista' ? PALETTE.bordoPrincipal : 'transparent' }}>
+                    Rescisão Trabalhista
+                  </button>
+                  <button onClick={() => setCalcSubTab('prazos')} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${calcSubTab === 'prazos' ? 'text-white' : 'text-slate-600'}`} style={{ backgroundColor: calcSubTab === 'prazos' ? PALETTE.bordoPrincipal : 'transparent' }}>
+                    Contagem de Prazos
+                  </button>
+                </div>
+                <p className="text-xs text-slate-600">Simulações rápidas e instantâneas para suporte às peças e reuniões.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
