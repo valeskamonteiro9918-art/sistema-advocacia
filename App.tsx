@@ -35,17 +35,11 @@ const PALETTE = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  
-  // States para Modais
-  const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-
-  // States de Seleção e Filtros
   const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
   const [calcSubTab, setCalcSubTab] = useState('trabalhista');
 
-  // Dados Principais do Sistema
-  const [processes, setProcesses] = useState([
+  // Dados dos Processos
+  const [processes] = useState([
     {
       id: '1',
       number: '5046388-53.2025.8.08.0048',
@@ -92,24 +86,28 @@ export default function App() {
     }
   ]);
 
+  // Dados dos Clientes
   const [clients] = useState([
-    { id: '1', name: 'Mosaniel Martins da Cruz', type: 'Pessoa Física', document: '123.456.789-00', phone: '27998812233', email: 'mosaniel.cruz@email.com', status: 'Ativo' },
-    { id: '2', name: 'Isabela Ferreira Santos', type: 'Pessoa Física', document: '987.654.321-11', phone: '27997724455', email: 'isabela.ferreira@email.com', status: 'Ativo' },
-    { id: '3', name: 'Jucimara Carvalho Barreto', type: 'Pessoa Física', document: '456.789.123-22', phone: '31991128899', email: 'jucimara.barreto@email.com', status: 'Ativo' },
-    { id: '4', name: 'Estevão dos Santos Pereira', type: 'Pessoa Física', document: '321.654.987-33', phone: '27995541122', email: 'estevao.pereira@email.com', status: 'Ativo' }
+    { id: '1', name: 'Mosaniel Martins da Cruz', document: '123.456.789-00', phone: '27998812233', email: 'mosaniel.cruz@email.com', status: 'Ativo' },
+    { id: '2', name: 'Isabela Ferreira Santos', document: '987.654.321-11', phone: '27997724455', email: 'isabela.ferreira@email.com', status: 'Ativo' },
+    { id: '3', name: 'Jucimara Carvalho Barreto', document: '456.789.123-22', phone: '31991128899', email: 'jucimara.barreto@email.com', status: 'Ativo' },
+    { id: '4', name: 'Estevão dos Santos Pereira', document: '321.654.987-33', phone: '27995541122', email: 'estevao.pereira@email.com', status: 'Ativo' }
   ]);
 
-  const [deadlines, setDeadlines] = useState([
+  // Dados da Agenda
+  const [deadlines] = useState([
     { id: '1', title: 'Manifestação sobre Sentença / Embargos', client: 'Mosaniel Martins da Cruz', process: '5046388-53.2025.8.08.0048', court: 'TJES - 4º JEC Serra', dueDate: '2026-10-28', dueTime: '23:59', type: 'FATAL', status: 'Em Andamento' },
     { id: '2', title: 'Audiência UNA Presencial TRT17', client: 'Estevão dos Santos Pereira', process: '0001478-18.2026.5.17.0007', court: 'TRT17 - 7ª Vara', dueDate: '2026-10-30', dueTime: '14:00', type: 'NORMAL', status: 'Em Andamento' },
     { id: '3', title: 'Pedido de Cumprimento de Sentença', client: 'Jucimara Carvalho Barreto', process: '1000797-34.2026.8.13.0543', court: 'TJMG Eproc', dueDate: '2026-11-03', dueTime: '18:00', type: 'FATAL', status: 'Pendente' }
   ]);
 
-  const [scannedPush, setScannedPush] = useState([
-    { id: 'p1', date: '2026-10-28', court: 'TJES - Diário Eletrônico', title: 'Intimação para Réplica', process: '5046388-53.2025.8.08.0048', snippet: 'Fica intimada a Dra. Valeska Monteiro para apresentar Réplica no prazo de 15 dias úteis...' },
-    { id: 'p2', date: '2026-10-27', court: 'TRT17 - PJe Push', title: 'Designação de Audiência de Conciliação', process: '0001083-23.2026.5.17.0008', snippet: 'Audiência conciliatória designada para o dia 12/11/2026 às 14:00h...' }
+  // Push / Varredura
+  const [scannedPush] = useState([
+    { id: 'p1', date: '2026-10-28', court: 'TJES - Diário Eletrônico', title: 'Intimação para Réplica', process: '5046388-53.2025.8.08.0048', snippet: 'Fica intimada a Dra. Valeska Monteiro para apresentar Réplica...' },
+    { id: 'p2', date: '2026-10-27', court: 'TRT17 - PJe Push', title: 'Designação de Audiência de Conciliação', process: '0001083-23.2026.5.17.0008', snippet: 'Audiência conciliatória designada para o dia 12/11/2026...' }
   ]);
 
+  // Modelos
   const [templates] = useState([
     { id: '1', category: 'Cível / JEC', title: 'Embargos de Declaração contra Sentença', description: 'Peça para sanar omissão, contradição ou obscuridade em sentença com pedido de efeito modificativo.' },
     { id: '2', category: 'Cível / Execução', title: 'Requerimento de Cumprimento de Sentença', description: 'Petição inicial de cumprimento definitivo de sentença com memória discriminada de cálculo.' }
@@ -126,38 +124,6 @@ export default function App() {
     },
     { causa: 0, honorarios: 0, descontos: 0 }
   );
-
-  const handleRunScan = () => {
-    setIsScanning(true);
-    setTimeout(() => {
-      const newIntimacao = {
-        id: Date.now().toString(),
-        date: new Date().toISOString().split('T')[0],
-        court: 'TJES - Capixaba Push',
-        title: 'Nova Publicação Disponibilizada',
-        process: '5046388-53.2025.8.08.0048',
-        snippet: 'Publicação no Diário da Justiça referente a prazo...'
-      };
-      setScannedPush([newIntimacao, ...scannedPush]);
-      setIsScanning(false);
-    }, 1200);
-  };
-
-  const handleMoveScanToAgenda = (item: any) => {
-    const agendaItem = {
-      id: Date.now().toString(),
-      title: item.title,
-      client: 'Cliente Vinculado',
-      process: item.process,
-      court: item.court,
-      dueDate: '2026-11-05',
-      dueTime: '23:59',
-      type: 'FATAL',
-      status: 'Pendente'
-    };
-    setDeadlines([...deadlines, agendaItem]);
-    setScannedPush(scannedPush.filter((s) => s.id !== item.id));
-  };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
@@ -209,18 +175,11 @@ export default function App() {
 
       {/* ÁREA PRINCIPAL */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+        <header className="px-6 py-5 border-b flex justify-between items-center shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
           <div>
             <h2 className="font-serif font-bold text-lg text-white">Advocacia & Consultoria Jurídica</h2>
             <p className="text-xs" style={{ color: PALETTE.douradoClaro }}>Dra. Valeska Monteiro • Serra / ES</p>
           </div>
-          <button
-            onClick={() => setIsNewProcessOpen(true)}
-            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md hover:brightness-110 transition"
-            style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
-          >
-            + Novo Processo
-          </button>
         </header>
 
         <div className="p-6 flex-1 overflow-y-auto">
@@ -233,9 +192,10 @@ export default function App() {
                   <h3 className="font-serif font-bold text-lg mt-1" style={{ color: PALETTE.textoPrincipal }}>Resumo Operacional, Financeiro & Comercial</h3>
                 </div>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Total de Causa</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Total da Causa</span>
                   <p className="text-xl font-bold font-mono">R$ {financialTotals.causa.toLocaleString('pt-BR')}</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -243,7 +203,7 @@ export default function App() {
                   <p className="text-xl font-bold font-mono text-emerald-800">R$ {financialTotals.honorarios.toLocaleString('pt-BR')}</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-800">Despesas / Custas</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-800">Despesas e Custas</span>
                   <p className="text-xl font-bold font-mono text-rose-800">R$ {financialTotals.descontos.toLocaleString('pt-BR')}</p>
                 </div>
               </div>
@@ -252,28 +212,15 @@ export default function App() {
 
           {/* VARREDURA & PUSH */}
           {activeTab === 'push' && (
-            <div className="space-y-6">
-              <div className="p-5 rounded-2xl border bg-white shadow-sm flex justify-between items-center" style={{ borderColor: PALETTE.linhasBordas }}>
-                <div>
-                  <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Varredura de Diários & PJe Push</h3>
-                  <p className="text-xs text-slate-600">Busca automatizada em diários oficiais e sistemas de intimação.</p>
-                </div>
-                <button onClick={handleRunScan} disabled={isScanning} className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow transition" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
-                  {isScanning ? 'A varrer...' : 'Executar Varredura'}
-                </button>
-              </div>
+            <div className="space-y-4">
+              <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Varredura de Diários & PJe Push</h3>
               <div className="space-y-3">
                 {scannedPush.map((item) => (
-                  <div key={item.id} className="p-4 rounded-xl border bg-white shadow-sm flex justify-between items-center" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.dourado }}>{item.court}</span>
-                      <h4 className="font-bold text-sm">{item.title}</h4>
-                      <p className="text-xs text-slate-600">{item.snippet}</p>
-                      <p className="text-[10px] font-mono text-slate-400">Processo: {item.process} • {item.date}</p>
-                    </div>
-                    <button onClick={() => handleMoveScanToAgenda(item)} className="px-3 py-1.5 rounded-lg text-xs font-bold border hover:bg-slate-50 transition" style={{ borderColor: PALETTE.linhasBordas }}>
-                      Lançar na Agenda
-                    </button>
+                  <div key={item.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.dourado }}>{item.court}</span>
+                    <h4 className="font-bold text-sm">{item.title}</h4>
+                    <p className="text-xs text-slate-600">{item.snippet}</p>
+                    <p className="text-[10px] font-mono text-slate-400">Processo: {item.process} • {item.date}</p>
                   </div>
                 ))}
               </div>
@@ -349,7 +296,7 @@ export default function App() {
               <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Biblioteca de Modelos</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {templates.map((t) => (
-                  <div key={t.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-2 cursor-pointer hover:border-amber-600 transition" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <div key={t.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
                     <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.dourado }}>{t.category}</span>
                     <h4 className="font-bold text-sm">{t.title}</h4>
                     <p className="text-xs text-slate-600">{t.description}</p>
@@ -364,7 +311,7 @@ export default function App() {
             <div className="space-y-4">
               <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>Apuração de Verbas & Honorários</h3>
               <div className="p-5 rounded-2xl border bg-white shadow-sm space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
-                <p className="text-xs text-slate-600">Selecione o processo para visualizar os honorários:</p>
+                <p className="text-xs text-slate-600">Selecione o processo para visualizar a discriminação:</p>
                 <select value={selectedVerbasProcId} onChange={(e) => setSelectedVerbasProcId(e.target.value)} className="w-full p-2.5 rounded-xl border text-xs font-bold" style={{ borderColor: PALETTE.linhasBordas }}>
                   {processes.map((p) => (
                     <option key={p.id} value={p.id}>{p.number} - {p.client}</option>
@@ -372,7 +319,7 @@ export default function App() {
                 </select>
                 <div className="grid grid-cols-3 gap-3 pt-3">
                   <div className="p-3 rounded-lg bg-slate-50 border text-center" style={{ borderColor: PALETTE.linhasBordas }}>
-                    <span className="text-[10px] uppercase font-bold text-slate-500">Valor da Causa</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-500">Valor Causa</span>
                     <p className="text-sm font-mono font-bold">R$ {selectedVerbasProc.value.toLocaleString('pt-BR')}</p>
                   </div>
                   <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-center">
@@ -401,7 +348,7 @@ export default function App() {
                     Contagem de Prazos
                   </button>
                 </div>
-                <p className="text-xs text-slate-600">Simulações rápidas e instantâneas para suporte às peças e reuniões.</p>
+                <p className="text-xs text-slate-600">Módulo de simulação operacional ativo.</p>
               </div>
             </div>
           )}
