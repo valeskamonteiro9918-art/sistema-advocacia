@@ -1,0 +1,371 @@
+import React, { useState } from 'react';
+import {
+  Briefcase,
+  Users,
+  Calendar as CalendarIcon,
+  Search,
+  DollarSign,
+  FileText,
+  Copy,
+  Filter,
+  Calculator,
+  LogOut
+} from 'lucide-react';
+
+const PALETTE = {
+  bordoPrincipal: '#7D1F3D',
+  bordoEscuro: '#5F1730',
+  dourado: '#A8843F',
+  douradoClaro: '#D9BD7E',
+  fundoPagina: '#F3ECE0',
+  fundoCartoes: '#FAF6EE',
+  linhasBordas: '#EFE3C8',
+  textoPrincipal: '#2A1A20',
+  textoApoio: '#7A6A6E',
+  valoresReceber: '#2F7A4F',
+  descontos: '#A33A3A'
+};
+
+export default function Dashboard({ handleLogout }: { handleLogout: () => void }) {
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  const [processes] = useState([
+    {
+      id: '1',
+      number: '5046388-53.2025.8.08.0048',
+      client: 'Valeska Monteiro (Patrono)',
+      action: 'Ação de Indenização por Danos Morais',
+      court: 'TJES - 4º JEC de Serra',
+      value: 35000,
+      honorarios: 10500,
+      descontos: 500,
+      status: 'Sentença Proferida'
+    },
+    {
+      id: '2',
+      number: '0001083-23.2026.5.17.0008',
+      client: 'Isabela Ferreira Santos',
+      action: 'Reclamação Trabalhista - Horas Extras e Citações',
+      court: 'TRT17 - 5ª Vara de Vitória',
+      value: 62400,
+      honorarios: 18720,
+      descontos: 1200,
+      status: 'Aguardando Audiência'
+    },
+    {
+      id: '3',
+      number: '1000797-34.2026.8.13.0543',
+      client: 'Jucimara Carvalho Barreto',
+      action: 'Ação Monitória / Cumprimento de Sentença',
+      court: 'TJMG - Eproc',
+      value: 48900,
+      honorarios: 14670,
+      descontos: 800,
+      status: 'Fase de Execução'
+    },
+    {
+      id: '4',
+      number: '0001478-18.2026.5.17.0007',
+      client: 'Estevão dos Santos Pereira',
+      action: 'Reclamatória Trabalhista UNA',
+      court: 'TRT17 - 7ª Vara de Vitória',
+      value: 85000,
+      honorarios: 25500,
+      descontos: 2000,
+      status: 'Em andamento'
+    }
+  ]);
+
+  const [deadlines] = useState([
+    {
+      id: '1',
+      title: 'Manifestação sobre Sentença / Embargos',
+      type: 'FATAL',
+      status: 'Em Andamento'
+    }
+  ]);
+
+  const financialTotals = processes.reduce(
+    (acc, p) => {
+      acc.causa += Number(p.value || 0);
+      acc.honorarios += Number(p.honorarios || 0);
+      acc.descontos += Number(p.descontos || 0);
+      return acc;
+    },
+    { causa: 0, honorarios: 0, descontos: 0 }
+  );
+
+  return (
+    <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
+      <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+        <div>
+          <div className="p-6 text-center border-b" style={{ borderColor: `${PALETTE.dourado}30` }}>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-md mb-2" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoPrincipal }}>
+              <span className="font-serif font-bold text-xl tracking-wider" style={{ color: PALETTE.douradoClaro }}>
+                VM
+              </span>
+            </div>
+            <h1 className="font-serif font-bold text-sm tracking-widest uppercase mt-1" style={{ color: PALETTE.douradoClaro }}>
+              DRA. VALESKA MONTEIRO
+            </h1>
+          </div>
+
+          <nav className="p-3 space-y-1">
+            {[
+              { id: 'dashboard', label: 'Dashboard Executivo', icon: Briefcase },
+              { id: 'push', label: 'Varredura & Push', icon: Search },
+              { id: 'processes', label: 'Gestão de Processos', icon: FileText },
+              { id: 'crm', label: 'Clientes (CRM)', icon: Users },
+              { id: 'agenda', label: 'Agenda de Prazos', icon: CalendarIcon },
+              { id: 'templates', label: 'Modelos de Peças', icon: Copy },
+              { id: 'finances', label: 'Apuração de Verbas', icon: DollarSign },
+              { id: 'calculadoras', label: 'Calculadoras Jurídicas', icon: Calculator }
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold transition ${
+                    isActive ? 'shadow-md font-bold' : 'hover:bg-white/5 opacity-80'
+                  }`}
+                  style={{
+                    backgroundColor: isActive ? PALETTE.bordoPrincipal : 'transparent',
+                    color: isActive ? '#FFFFFF' : PALETTE.fundoPagina
+                  }}
+                >
+                  <Icon size={16} style={{ color: isActive ? PALETTE.douradoClaro : PALETTE.dourado }} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        <div className="p-4 border-t" style={{ borderColor: `${PALETTE.dourado}30` }}>
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition"
+          >
+            <LogOut size={14} /> Sair do Sistema
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col min-w-0">
+        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+          <div>
+            <h2 className="font-serif font-bold text-lg text-white">
+              Advocacia & Consultoria Jurídica
+            </h2>
+            <p className="text-xs" style={{ color: PALETTE.douradoClaro }}>
+              Dra. Valeska Monteiro • Serra / ES
+            </p>
+          </div>
+
+          <button
+            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md hover:brightness-110 transition"
+            style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
+          >
+            + Novo Processo
+          </button>
+        </header>
+
+        <div className="p-6 flex-1 overflow-y-auto">
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              <div className="p-4 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                      Painel Executivo
+                    </span>
+                    <span className="text-xs font-mono font-semibold" style={{ color: PALETTE.valoresReceber }}>
+                      • Conectado via API (Sync Ativo)
+                    </span>
+                  </div>
+                  <h3 className="font-serif font-bold text-lg mt-1" style={{ color: PALETTE.textoPrincipal }}>
+                    Resumo Operacional, Financeiro & Comercial
+                  </h3>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <Filter size={14} style={{ color: PALETTE.dourado }} />
+                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
+                      <option>Todos os Clientes / Regiões</option>
+                      <option>Espírito Santo (TJES / TRT17)</option>
+                      <option>Minas Gerais (TJMG)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <CalendarIcon size={14} style={{ color: PALETTE.dourado }} />
+                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
+                      <option>Este Mês (Out/2026)</option>
+                      <option>Último Trimestre</option>
+                      <option>Ano Atual (2026)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <Briefcase size={18} style={{ color: PALETTE.bordoPrincipal }} /> 1. Gestão Operacional & Contencioso
+                  </h4>
+                  <span className="text-xs font-bold" style={{ color: PALETTE.textoApoio }}>
+                    {processes.length} Processos Ativos
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Distribuição por Área
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between font-bold">
+                        <span>Cível / JEC:</span>
+                        <span style={{ color: PALETTE.bordoPrincipal }}>2 casos (50%)</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Trabalhista:</span>
+                        <span style={{ color: PALETTE.dourado }}>2 casos (50%)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Ciclo de Vida / Fases
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span>Conhecimento:</span>
+                        <span className="font-mono font-bold">2</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Execução / Sentença:</span>
+                        <span className="font-mono font-bold">2</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-700">
+                      Alertas & Urgências
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between font-bold text-rose-800">
+                        <span>Prazos Fatais:</span>
+                        <span className="font-mono">{deadlines.length}</span>
+                      </div>
+                      <div className="flex justify-between text-amber-800">
+                        <span>Audiências Agendadas:</span>
+                        <span className="font-mono font-bold">1</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Produtividade por Patrono
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between font-bold" style={{ color: PALETTE.bordoEscuro }}>
+                        <span>Dra. Valeska Monteiro:</span>
+                        <span className="font-mono">100% da Banca</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]" style={{ color: PALETTE.textoApoio }}>
+                        <span>Demandas no Prazo:</span>
+                        <span className="font-mono font-bold text-emerald-700">100%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <DollarSign size={18} className="text-emerald-700" /> 2. Indicadores Financeiros
+                  </h4>
+                  <span className="text-xs font-mono font-bold text-emerald-800">
+                    Geral Consolidado
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Contingenciamento Total sob Risco
+                    </span>
+                    <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>
+                      R\$ {financialTotals.causa.toLocaleString('pt-BR')}
+                    </p>
+                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
+                      <p>• Risco Provável (Ganho Estimado): <span className="font-bold text-emerald-800">75%</span></p>
+                      <p>• Risco Possível / Neutro: <span className="font-bold text-amber-700">25%</span></p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block text-emerald-800">
+                      Honorários Contratados / A Receber
+                    </span>
+                    <p className="text-xl font-bold font-mono text-emerald-800">
+                      R\$ {financialTotals.honorarios.toLocaleString('pt-BR')}
+                    </p>
+                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
+                      <p>• Faturado / Recebido no Mês: <span className="font-bold text-emerald-800">R\$ 10.500</span></p>
+                      <p>• A Receber Futuro: <span className="font-bold" style={{ color: PALETTE.bordoPrincipal }}>R\$ 58.820</span></p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.descontos }}>
+                      Custos Operacionais e Despesas
+                    </span>
+                    <p className="text-xl font-bold font-mono text-rose-800">
+                      R\$ {financialTotals.descontos.toLocaleString('pt-BR')}
+                    </p>
+                    <div className="text-[10px] space-y-0.5" style={{ color: PALETTE.textoApoio }}>
+                      <p>• Custas Reembolsáveis: <span className="font-bold">R\$ 2.700</span></p>
+                      <p>• Despesas Operacionais: <span className="font-bold">R\$ 1.800</span></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <Users size={18} style={{ color: PALETTE.dourado }} /> 3. Comercial & Atendimento (CRM)
+                  </h4>
+                  <span className="text-xs font-bold text-emerald-800">
+                    Captação Ativa
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Taxa de Conversão de Contratos
+                    </span>
+                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.bordoPrincipal }}>
+                      68%
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Tempo Médio de Resposta ao Lead
+                    </span>
+                    <p className="text-2xl font-bold font-serif" style={{ color: PALETTE.dourado }}>
+                      1h 15m
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className
