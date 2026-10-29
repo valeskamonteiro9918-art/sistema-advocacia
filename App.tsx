@@ -102,62 +102,93 @@ export default function App() {
     await supabase.auth.signOut();
   };
 
-  // --- CÓDIGO ORIGINAL & NOVOS ESTADOS ---
+  // --- CÓDIGO ORIGINAL INTACTO ---
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Dynamic Month State (Default: October 2026)
   const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1));
-  const [calendarView, setCalendarView] = useState('grid');
+  const [calendarView, setCalendarView] = useState('grid'); // 'grid' | 'list'
 
-  // Modais de Criação/Edição
+  // Modals & Creation States
   const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
-  const [editingProcess, setEditingProcess] = useState<any>(null);
-
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<any>(null);
-
   const [isNewDeadlineOpen, setIsNewDeadlineOpen] = useState(false);
-  const [selectedDeadlineModal, setSelectedDeadlineModal] = useState<any>(null);
-
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] = useState<any>(null);
-
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
+
+  // States de Edição adicionados mantendo estrutura original
+  const [editingProcess, setEditingProcess] = useState<any>(null);
+  const [editingClient, setEditingClient] = useState<any>(null);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
   const [editingTask, setEditingTask] = useState<any>(null);
 
-  // Varredura
+  // Scanning simulation state
   const [isScanning, setIsScanning] = useState(false);
   const [dismissedScanIds, setDismissedScanIds] = useState<string[]>([]);
 
-  // Filtros
+  // Filters
   const [selectedCategory, setSelectedCategory] = useState('Todas');
-  const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
-  const [calcSubTab, setCalcSubTab] = useState('trabalhista');
 
-  // Popovers
+  // Selected Process for Financials
+  const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
+
+  // Mouse hover state for portal popover positioning
   const [hoveredDeadline, setHoveredDeadline] = useState<any>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
 
-  // Form States Originais
+  // Selected Deadline state for click-to-edit modal
+  const [selectedDeadlineModal, setSelectedDeadlineModal] = useState<any>(null);
+
+  // Form States
   const [newProcess, setNewProcess] = useState({
-    number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento'
+    number: '',
+    client: '',
+    action: '',
+    court: '',
+    value: '',
+    honorarios: '',
+    descontos: '',
+    status: 'Em andamento'
   });
 
   const [newClient, setNewClient] = useState({
-    name: '', type: 'Pessoa Física', document: '', phone: '', email: '', status: 'Ativo'
+    name: '',
+    type: 'Pessoa Física',
+    document: '',
+    phone: '',
+    email: '',
+    status: 'Ativo'
   });
 
   const [newDeadline, setNewDeadline] = useState({
-    title: '', client: '', process: '', dueDate: '2026-10-28', dueTime: '17:00', type: 'FATAL'
+    title: '',
+    client: '',
+    process: '',
+    dueDate: '2026-10-28',
+    dueTime: '17:00',
+    type: 'FATAL'
   });
 
   const [newTemplate, setNewTemplate] = useState({
-    category: 'Cível / JEC', title: '', description: '', content: ''
+    category: 'Cível / JEC',
+    title: '',
+    description: '',
+    content: ''
   });
 
   const [newTaskForm, setNewTaskForm] = useState({
-    title: '', description: '', process: '', responsible: 'Dra. Valeska Monteiro', dueDate: '2026-10-30', status: 'todo'
+    title: '',
+    description: '',
+    process: '',
+    responsible: 'Dra. Valeska Monteiro',
+    dueDate: '2026-10-30',
+    status: 'todo'
   });
 
-  // Base de Dados
+  // Calculadoras Sub-tab State
+  const [calcSubTab, setCalcSubTab] = useState('trabalhista');
+
+  // Main Data States
   const [processes, setProcesses] = useState([
     {
       id: '1',
@@ -316,17 +347,24 @@ export default function App() {
       title: 'Requerimento de Cumprimento de Sentença',
       description: 'Petição inicial de cumprimento definitivo de sentença com memória discriminada de cálculo.',
       content: `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DE DIREITO DA VARA CÍVEL DA COMARCA DE SERRA/ES\n\nProcesso nº: [NÚMERO DO PROCESSO]\n\n[NOME DO CLIENTE], por sua advogada Dra. Valeska Monteiro, vem requerer o CUMPRIMENTO DEFINITIVO DE SENTENÇA em face de [EXECUTADO], para satisfação do crédito no valor de R$ [VALOR], conforme memória demonstrativa de cálculo anexa.\n\nRequer a intimação do executado para pagamento no prazo de 15 dias, sob pena de multa do art. 523 do CPC.`
+    },
+    {
+      id: '3',
+      category: 'Trabalhista',
+      title: 'Manifestação sobre Citação / Redesignação',
+      description: 'Petição padrão informando andamento de citação e requerendo prosseguimento em audiência.',
+      content: `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DA VARA DO TRABALHO DE VITÓRIA/ES\n\nProcesso nº: [NÚMERO DO PROCESSO]\n\n[NOME DO CLIENTE], por sua advogada Dra. Valeska Monteiro, vem respeitosamente requerer a juntada do comprovante de notificação e o regular prosseguimento do feito.`
     }
   ]);
 
   const [selectedTemplate, setSelectedTemplate] = useState<any>(templates[0]);
 
-  // Aba de Tarefas Dinâmicas
+  // Quadro de Tarefas
   const [tasks, setTasks] = useState([
     {
       id: 't1',
       title: 'Elaborar Réplica à Contestação',
-      description: 'Analisar preliminares de mérito e fundamentar nos autos.',
+      description: 'Analisar preliminares de mérito e responder nos autos.',
       process: '5046388-53.2025.8.08.0048',
       responsible: 'Dra. Valeska Monteiro',
       dueDate: '2026-10-30',
@@ -335,7 +373,7 @@ export default function App() {
     {
       id: 't2',
       title: 'Calcular Verbas Rescisórias',
-      description: 'Conferir os cartões de ponto anexados ao processo.',
+      description: 'Conferir cartões de ponto para instrução inicial.',
       process: '0001083-23.2026.5.17.0008',
       responsible: 'Dra. Dayane',
       dueDate: '2026-10-29',
@@ -343,8 +381,10 @@ export default function App() {
     }
   ]);
 
+  // Financial selected process object
   const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
+  // Financial Totals Calculation
   const financialTotals = processes.reduce(
     (acc, p) => {
       acc.causa += Number(p.value || 0);
@@ -355,7 +395,7 @@ export default function App() {
     { causa: 0, honorarios: 0, descontos: 0 }
   );
 
-  // --- HANDLERS E FUNÇÕES ---
+  // Handlers
   const handleAddProcess = (e: any) => {
     e.preventDefault();
     if (!newProcess.number || !newProcess.client) return;
@@ -383,7 +423,7 @@ export default function App() {
   };
 
   const handleDeleteProcess = (id: string) => {
-    if (confirm('Deseja excluir este processo?')) {
+    if (confirm('Deseja excluir este processo do acervo?')) {
       setProcesses(processes.filter(p => p.id !== id));
       setEditingProcess(null);
     }
@@ -420,6 +460,14 @@ export default function App() {
     setIsNewDeadlineOpen(false);
   };
 
+  const updateDeadlineStatus = (id: string, newStatus: string) => {
+    setDeadlines(prev => prev.map(d => d.id === id ? { 
+      ...d, 
+      status: newStatus, 
+      completed: newStatus === 'Finalizado' 
+    } : d));
+  };
+
   const handleMouseEnterItem = (e: any, item: any) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setHoverPos({
@@ -429,7 +477,9 @@ export default function App() {
     setHoveredDeadline(item);
   };
 
-  const handleMouseLeaveItem = () => setHoveredDeadline(null);
+  const handleMouseLeaveItem = () => {
+    setHoveredDeadline(null);
+  };
 
   const handleAddTemplate = (e: any) => {
     e.preventDefault();
@@ -449,7 +499,7 @@ export default function App() {
   };
 
   const handleDeleteTemplate = (id: string) => {
-    if (confirm('Deseja excluir este modelo?')) {
+    if (confirm('Deseja excluir este modelo de peça?')) {
       const rest = templates.filter(t => t.id !== id);
       setTemplates(rest);
       if (selectedTemplate?.id === id) setSelectedTemplate(rest[0] || null);
@@ -468,7 +518,7 @@ export default function App() {
           court: 'TJES - Capixaba Push',
           title: 'Nova Publicação Disponibilizada',
           process: '5046388-53.2025.8.08.0048',
-          snippet: 'Publicação referente a prazo para contestação...'
+          snippet: 'Publicação no Diário da Justiça referente a prazo para contestação de reconvenção...'
         };
         setScannedPush([newIntimacao, ...scannedPush]);
       }
@@ -480,7 +530,7 @@ export default function App() {
     const agendaItem = {
       id: Date.now().toString(),
       title: item.title,
-      client: 'Cliente Relacionado',
+      client: 'Cliente Relacionado ao Processo',
       process: item.process,
       court: item.court,
       dueDate: '2026-11-05',
@@ -515,21 +565,28 @@ export default function App() {
   };
 
   // Calendar Helpers
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 
   const currentYear = currentDate.getFullYear();
   const currentMonthIdx = currentDate.getMonth();
   const monthName = currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
   const totalDays = getDaysInMonth(currentYear, currentMonthIdx);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonthIdx);
 
   const categories = ['Todas', ...Array.from(new Set(templates.map((t) => t.category)))];
   const filteredTemplates = selectedCategory === 'Todas' ? templates : templates.filter((t) => t.category === selectedCategory);
 
-  // --- TELA DE LOGIN ---
+  // --- TELA DE LOGIN (BLOQUEIA O ACESSO SE NÃO TIVER LOGADO) ---
   if (!session) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 font-sans" style={{ backgroundColor: PALETTE.bordoEscuro }}>
@@ -632,6 +689,7 @@ export default function App() {
   // --- INTERFACE PRINCIPAL ---
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
+      {/* FLOATING HOVER CARD FOR CALENDAR (Portal Strategy) */}
       {hoveredDeadline && (
         <div
           className="fixed z-[9999] w-72 p-3.5 rounded-xl shadow-2xl border text-white space-y-2 pointer-events-none transition-all duration-150"
@@ -658,13 +716,19 @@ export default function App() {
           <div className="text-[11px] space-y-0.5 text-slate-200">
             <p><strong className="text-amber-200">Cliente:</strong> {hoveredDeadline.client}</p>
             <p><strong className="text-amber-200">Proc:</strong> {hoveredDeadline.process}</p>
+            <p><strong className="text-amber-200">Local:</strong> {hoveredDeadline.court}</p>
           </div>
+          
+          <p className="text-[9px] italic text-slate-400 border-t pt-1" style={{ borderColor: `${PALETTE.dourado}30` }}>
+            Clique para editar dados ou alterar status
+          </p>
         </div>
       )}
 
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
         <div>
+          {/* Header Monogram */}
           <div className="p-6 text-center border-b" style={{ borderColor: `${PALETTE.dourado}30` }}>
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-md mb-2" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoPrincipal }}>
               <span className="font-serif font-bold text-xl tracking-wider" style={{ color: PALETTE.douradoClaro }}>
@@ -676,6 +740,7 @@ export default function App() {
             </h1>
           </div>
 
+          {/* Nav Items */}
           <nav className="p-3 space-y-1">
             {[
               { id: 'dashboard', label: 'Dashboard Executivo', icon: Briefcase },
@@ -710,6 +775,7 @@ export default function App() {
           </nav>
         </div>
 
+        {/* Footer Info & Botão Sair */}
         <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
           <p className="font-semibold">Serra / ES • OAB/ES</p>
           <p className="opacity-60 mt-0.5 mb-3">Sistema Advocacia v2.6</p>
@@ -724,6 +790,7 @@ export default function App() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex flex-col min-w-0">
+        {/* Top Header Banner */}
         <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
           <div>
             <h2 className="font-serif font-bold text-lg" style={{ color: '#FFFFFF' }}>
@@ -743,9 +810,12 @@ export default function App() {
           </button>
         </header>
 
+        {/* Dynamic Tab Body */}
         <div className="p-6 flex-1 overflow-y-auto">
+          {/* TAB 1: DASHBOARD EXECUTIVO */}
           {activeTab === 'dashboard' && (
             <div className="space-y-6">
+              {/* Top Filter & Sync Bar */}
               <div className="p-4 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                 <div>
                   <div className="flex items-center gap-2">
@@ -760,26 +830,88 @@ export default function App() {
                     Resumo Operacional, Financeiro & Comercial
                   </h3>
                 </div>
+
+                {/* Quick Filters */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <Filter size={14} style={{ color: PALETTE.dourado }} />
+                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
+                      <option>Todos os Clientes / Regiões</option>
+                      <option>Espírito Santo (TJES / TRT17)</option>
+                      <option>Minas Gerais (TJMG)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <CalendarIcon size={14} style={{ color: PALETTE.dourado }} />
+                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
+                      <option>Este Mês (Out/2026)</option>
+                      <option>Último Trimestre</option>
+                      <option>Ano Atual (2026)</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Total da Causa</span>
-                  <p className="text-xl font-bold font-mono">R$ {financialTotals.causa.toLocaleString('pt-BR')}</p>
+              {/* BLOCK 1: GESTÃO OPERACIONAL E DE CONTENCIOSO */}
+              <div className="p-5 rounded-2xl border space-y-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <h4 className="font-serif font-bold text-base flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                    <Briefcase size={18} style={{ color: PALETTE.bordoPrincipal }} /> 1. Gestão Operacional & Contencioso
+                  </h4>
+                  <span className="text-xs font-bold" style={{ color: PALETTE.textoApoio }}>
+                    {processes.length} Processos Ativos
+                  </span>
                 </div>
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block text-emerald-800">Honorários Estimados</span>
-                  <p className="text-xl font-bold font-mono text-emerald-800">R$ {financialTotals.honorarios.toLocaleString('pt-BR')}</p>
-                </div>
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block text-rose-800">Despesas / Custas</span>
-                  <p className="text-xl font-bold font-mono text-rose-800">R$ {financialTotals.descontos.toLocaleString('pt-BR')}</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Distribuição por Área
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between font-bold">
+                        <span>Cível / JEC:</span>
+                        <span style={{ color: PALETTE.bordoPrincipal }}>2 casos (50%)</span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>Trabalhista:</span>
+                        <span style={{ color: PALETTE.dourado }}>2 casos (50%)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>
+                      Ciclo de Vida / Fases
+                    </span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span>Conhecimento:</span>
+                        <span className="font-mono font-bold">2</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Execução / Sentença:</span>
+                        <span className="font-mono font-bold">2</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Total da Causa</span>
+                    <p className="text-xl font-bold font-mono">R$ {financialTotals.causa.toLocaleString('pt-BR')}</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider block text-emerald-800">Honorários Estimados</span>
+                    <p className="text-xl font-bold font-mono text-emerald-800">R$ {financialTotals.honorarios.toLocaleString('pt-BR')}</p>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* TAB: QUADRO DE TAREFAS */}
+          {/* TAB 2: QUADRO DE TAREFAS */}
           {activeTab === 'tasks' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -842,6 +974,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 3: VARREDURA & PUSH */}
           {activeTab === 'push' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -871,6 +1004,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 4: GESTÃO DE PROCESSOS */}
           {activeTab === 'processes' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -906,6 +1040,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 5: CLIENTES (CRM) */}
           {activeTab === 'crm' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -937,6 +1072,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 6: AGENDA DE PRAZOS */}
           {activeTab === 'agenda' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -981,6 +1117,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 7: MODELOS DE PEÇAS */}
           {activeTab === 'templates' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
@@ -1019,6 +1156,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 8: APURAÇÃO DE VERBAS */}
           {activeTab === 'finances' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Apuração de Verbas</h3>
@@ -1062,6 +1200,7 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB 9: CALCULADORAS JURÍDICAS */}
           {activeTab === 'calculadoras' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Calculadoras Jurídicas</h3>
