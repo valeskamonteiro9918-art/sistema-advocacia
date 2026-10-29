@@ -447,9 +447,13 @@ export default function App() {
   };
 
   const addTask = (e) => {
-    e.preventDefault();
-    if (!taskDraft.trim()) return;
-    setTasks(prev => [{ id: Date.now().toString(), title: taskDraft.trim(), description: '', status: 'A fazer', priority: 'Média', dueDate: '', assignee: 'Dra. Valeska' }, ...prev]);
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    const title = String(taskDraft || '').trim();
+    if (!title) {
+      window.alert('Digite o nome da tarefa antes de clicar em Criar.');
+      return;
+    }
+    setTasks(prev => [{ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, description: '', status: 'A fazer', priority: 'Média', dueDate: '', assignee: 'Dra. Valeska' }, ...prev]);
     setTaskDraft('');
   };
 
@@ -1478,7 +1482,7 @@ export default function App() {
                   </div>
                   <form onSubmit={addTask} className="flex gap-2 w-full md:w-auto">
                     <input value={taskDraft} onChange={e => setTaskDraft(e.target.value)} placeholder="Nome da nova tarefa..." className="flex-1 md:w-64 p-2.5 border rounded-xl text-xs bg-white" style={{ borderColor: PALETTE.linhasBordas }} />
-                    <button type="submit" className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
+                    <button type="button" onClick={() => addTask()} disabled={!taskDraft.trim()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
                   </form>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-4">
@@ -1848,13 +1852,22 @@ document.addEventListener('change',e=>{if(e.target.name==='motivo')syncAviso();u
 document.addEventListener('click',e=>{const x=e.target.dataset&&e.target.dataset.x;if(x!==undefined&&x!==''){mats.splice(+x,1);if(!mats.length)mats=[{d:'',v:''}];renderMats();update()}});
 $('addM').onclick=()=>{mats.push({d:'',v:''});renderMats();const i=document.querySelectorAll('#mats input');i[i.length-2].focus()};
 $('ctps').onchange=e=>{const f=e.target.files[0];if(!f)return;if(f.type!=='application/pdf'||f.size>15e6){e.target.value='';arq='';$('ctpsH').textContent='Escolha um arquivo PDF de até 15 MB.';return}arq=f.name;$('ctpsH').textContent='Anexado: '+f.name+'. Lembre de enviá-lo no WhatsApp.';update()};
-$('wa').onclick=async()=>{if(needName())return;
- const MOB=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform));
- const url='https://wa.me/'+ZAP+'?text='+encodeURIComponent(texto());lastTxt=texto();
- let f=null;try{f=await gerarPdf();
- if(f&&MOB&&navigator.canShare){const file=new File([f.blob],f.name,{type:'application/pdf'});
- if(navigator.canShare({files:[file]})){await navigator.share({files:[file],text:texto()});resetForm();toast('Enviado! O formulário foi limpo para um novo cálculo.');return}}}catch(e){if(e&&e.name==='AbortError')return}
- window.open(url,'_blank','noopener');$('waBox').classList.remove('hide');if(f)saveFile(f.blob,f.name);resetForm()};
+$('wa').onclick=()=>{
+ if(needName())return;
+ // Abra o WhatsApp imediatamente durante o clique do usuário. Aguardar a geração
+ // do PDF antes de window.open fazia o navegador bloquear a nova janela.
+ lastTxt=texto();
+ const url='https://wa.me/'+ZAP+'?text='+encodeURIComponent(lastTxt);
+ const waWindow=window.open(url,'_blank');
+ $('waBox').classList.remove('hide');
+ if(!waWindow){
+   toast('O navegador bloqueou a janela. Permita pop-ups ou use o link do WhatsApp na mensagem abaixo.');
+   const fallback=document.createElement('a');
+   fallback.href=url;fallback.target='_blank';fallback.rel='noopener';fallback.textContent='Abrir WhatsApp com a mensagem pronta';
+   fallback.style.cssText='display:block;margin-top:8px;color:var(--accent);font-weight:700';
+   $('waBox').appendChild(fallback);
+ }
+};
 $('bJson').onclick=()=>saveFile(JSON.stringify(state(),null,1),'calculo-trabalhista.json');
 $('bOpen').onclick=()=>$('fOpen').click();
 $('fOpen').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{apply(JSON.parse(await f.text()));toast('Dados carregados')}catch(x){toast('Arquivo inválido')}e.target.value=''};
@@ -2896,12 +2909,25 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
  }
 
  document.getElementById('whatsappBtn').addEventListener('click', () => {
- gerarPdf();
+ // Não gerar/abrir o documento de impressão neste mesmo clique: dois pop-ups
+ // concorrentes faziam o WhatsApp ser bloqueado em vários navegadores.
  const text = buildResumoText();
  const url = 'https://wa.me/?text=' + encodeURIComponent(text);
  const waWindow = window.open(url, '_blank');
  if(!waWindow){
- showToast('Permita pop-ups no navegador para abrir o WhatsApp.');
+   showToast('O navegador bloqueou a janela. Permita pop-ups para abrir o WhatsApp.');
+   let link = document.getElementById('whatsappFallbackLink');
+   if(!link){
+     link = document.createElement('a');
+     link.id = 'whatsappFallbackLink';
+     link.textContent = 'Abrir WhatsApp com a mensagem pronta';
+     link.target = '_blank'; link.rel = 'noopener';
+     link.style.cssText = 'display:block;margin-top:8px;color:#7d1f3d;font-weight:700';
+     document.getElementById('whatsappBtn').insertAdjacentElement('afterend', link);
+   }
+   link.href = url;
+ } else {
+   showToast('Mensagem preparada no WhatsApp. Para anexar um PDF, gere-o no botão ao lado e anexe o arquivo na conversa.');
  }
  });
 
