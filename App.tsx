@@ -1047,7 +1047,7 @@ export default function App() {
                     type="button"
                     onClick={() => setIsNewProcessOpen(true)}
                     className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:brightness-105"
-                    style={{ backgroundColor: isDarkMode ? '#B83250' : '#C85F79' }}
+                    style={{ backgroundColor: PALETTE.bordoPrincipal }}
                   >
                     <Plus size={14} /> Novo processo
                   </button>
@@ -1061,10 +1061,10 @@ export default function App() {
                   <div className="text-3xl font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{processes.filter((item) => !/arquivado|encerrado|baixado/i.test(String(item.status || ''))).length}</div>
                   <div className="text-[10px] flex items-center gap-1" style={{ color: PALETTE.valoresReceber }}><Briefcase size={11} /> Carteira do escritório</div>
                 </div>
-                <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: isDarkMode ? '#251822' : '#21151C', borderColor: isDarkMode ? '#4B2635' : '#21151C' }}>
-                  <div className="text-[10px] uppercase tracking-[0.12em] font-semibold text-white/75">Prazos nos próximos 7 dias</div>
-                  <div className="text-3xl font-serif leading-none text-white">{dashboardNextWeekCount}</div>
-                  <div className="text-[10px] font-semibold" style={{ color: '#F3C879' }}>{dashboardNextWeekCount ? 'Acompanhe as próximas entregas' : 'Nenhum prazo nos próximos 7 dias'}</div>
+                <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: PALETTE.caixaTotal, borderColor: PALETTE.bordoPrincipal }}>
+                  <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: PALETTE.textoApoio }}>Prazos nos próximos 7 dias</div>
+                  <div className="text-3xl font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{dashboardNextWeekCount}</div>
+                  <div className="text-[10px] font-semibold" style={{ color: PALETTE.descontos }}>{dashboardNextWeekCount ? 'Acompanhe as próximas entregas' : 'Nenhum prazo nos próximos 7 dias'}</div>
                 </div>
                 <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                   <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: PALETTE.textoApoio }}>Audiências no mês</div>
@@ -1096,7 +1096,7 @@ export default function App() {
                       const dueMonth = dueDate ? dueDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase() : 'S/D';
                       const daysToDue = dueDate ? Math.round((dueDate.getTime() - dashboardToday.getTime()) / 86400000) : null;
                       const dueLabel = item.completed || item.status === 'Finalizado' ? 'Concluído' : daysToDue === null ? 'Sem data' : daysToDue < 0 ? 'Vencido' : daysToDue === 0 ? 'Hoje' : daysToDue === 1 ? 'Amanhã' : `${daysToDue} dias`;
-                      const dueColor = item.completed || item.status === 'Finalizado' ? PALETTE.valoresReceber : daysToDue !== null && daysToDue < 0 ? PALETTE.descontos : daysToDue !== null && daysToDue <= 1 ? '#C45C77' : '#C49A54';
+                      const dueColor = item.completed || item.status === 'Finalizado' ? PALETTE.valoresReceber : daysToDue !== null && daysToDue <= 1 ? PALETTE.descontos : PALETTE.bordoPrincipal;
                       return (
                         <button type="button" key={item.id} onClick={() => setSelectedDeadlineModal({ ...item })} className="w-full py-3 flex items-center gap-3 text-left rounded-lg px-1 transition hover:bg-black/[0.025]" style={{ color: PALETTE.textoPrincipal }}>
                           <span className="w-10 h-11 shrink-0 rounded-lg flex flex-col items-center justify-center" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>
@@ -1136,8 +1136,8 @@ export default function App() {
                             return (
                               <div key={item.id} className="flex flex-col items-center justify-end h-full min-w-0 flex-1 gap-1">
                                 <div className="flex items-end justify-center gap-1 h-[108px] w-full">
-                                  <div title={`Valor da causa: ${causeValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="rounded-t-sm w-3 max-w-[35%]" style={{ height: `${causeHeight}%`, backgroundColor: '#C85F79', minHeight: 4 }} />
-                                  <div title={`Honorários: ${feesValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="rounded-t-sm w-3 max-w-[35%]" style={{ height: `${feesHeight}%`, backgroundColor: '#D8C5A4', minHeight: 4 }} />
+                                  <div title={`Valor da causa: ${causeValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="rounded-t-sm w-3 max-w-[35%]" style={{ height: `${causeHeight}%`, backgroundColor: PALETTE.bordoPrincipal, minHeight: 4 }} />
+                                  <div title={`Honorários: ${feesValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="rounded-t-sm w-3 max-w-[35%]" style={{ height: `${feesHeight}%`, backgroundColor: PALETTE.valoresReceber, minHeight: 4 }} />
                                 </div>
                                 <span className="text-[8px] sm:text-[9px] truncate max-w-full" style={{ color: PALETTE.textoApoio }}>{label}</span>
                               </div>
@@ -1145,8 +1145,8 @@ export default function App() {
                           })}
                         </div>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[9px]" style={{ color: PALETTE.textoApoio }}>
-                          <span className="inline-flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#C85F79' }} />Valor da causa</span>
-                          <span className="inline-flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: '#D8C5A4' }} />Honorários</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: PALETTE.bordoPrincipal }} />Valor da causa</span>
+                          <span className="inline-flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm" style={{ backgroundColor: PALETTE.valoresReceber }} />Honorários</span>
                         </div>
                       </>
                     ) : <div className="py-8 text-center text-xs" style={{ color: PALETTE.textoApoio }}>Cadastre processos para visualizar o comparativo.</div>}
@@ -1159,7 +1159,7 @@ export default function App() {
                       {dashboardAreaData.map((area) => (
                         <div key={area.label} className="grid grid-cols-[minmax(78px,1fr)_minmax(70px,1.4fr)_22px] gap-2 items-center">
                           <span className="text-[10px] truncate" style={{ color: PALETTE.textoPrincipal }}>{area.label}</span>
-                          <span className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.fundoPagina }}><span className="block h-full rounded-full" style={{ width: `${Math.max(6, (area.count / dashboardAreaMax) * 100)}%`, backgroundColor: '#C85F79' }} /></span>
+                          <span className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.fundoPagina }}><span className="block h-full rounded-full" style={{ width: `${Math.max(6, (area.count / dashboardAreaMax) * 100)}%`, backgroundColor: PALETTE.bordoPrincipal }} /></span>
                           <span className="text-[10px] font-bold text-right" style={{ color: PALETTE.textoPrincipal }}>{area.count}</span>
                         </div>
                       ))}
@@ -1196,7 +1196,7 @@ export default function App() {
                     <div className="space-y-3">
                       {dashboardRecentNotifications.map((item) => (
                         <div key={item.id} className="border-b pb-2.5 last:border-b-0 last:pb-0" style={{ borderColor: PALETTE.linhasBordas }}>
-                          <div className="flex items-start justify-between gap-2"><span className="text-[10px] font-bold" style={{ color: PALETTE.textoPrincipal }}>Intimação recebida</span><span className="rounded-full px-2 py-0.5 text-[8px] font-semibold shrink-0" style={{ backgroundColor: isDarkMode ? '#4B2635' : '#F8DDE4', color: isDarkMode ? '#F9A8B8' : '#9F3150' }}>Nova</span></div>
+                          <div className="flex items-start justify-between gap-2"><span className="text-[10px] font-bold" style={{ color: PALETTE.textoPrincipal }}>Intimação recebida</span><span className="rounded-full px-2 py-0.5 text-[8px] font-semibold shrink-0" style={{ backgroundColor: `${PALETTE.bordoPrincipal}20`, color: PALETTE.bordoPrincipal }}>Nova</span></div>
                           <p className="text-[9px] mt-1 leading-snug" style={{ color: PALETTE.textoApoio }}>Proc. {item.process} · {item.date}</p>
                         </div>
                       ))}
