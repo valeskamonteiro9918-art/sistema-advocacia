@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import React, { useState } from 'react';
 import {
   Briefcase,
   Users,
@@ -16,9 +15,7 @@ import {
   MessageCircle,
   Filter,
   X,
-  Calculator,
-  LogOut,
-  Lock
+  Calculator
 } from 'lucide-react';
 
 const PALETTE = {
@@ -37,14 +34,6 @@ const PALETTE = {
 };
 
 export default function App() {
-  // Autenticação Supabase State
-  const [session, setSession] = useState<any>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loadingAuth, setLoadingAuth] = useState(false);
-  const [authError, setAuthError] = useState('');
-
-  // Main Navigation & App States
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Dynamic Month State (Default: October 2026)
@@ -285,34 +274,6 @@ export default function App() {
 
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
 
-  // Monitor Supabase Auth State
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoadingAuth(true);
-    setAuthError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setAuthError('E-mail ou senha incorretos. Verifique suas credenciais.');
-    }
-    setLoadingAuth(false);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
   // Financial selected process object
   const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
@@ -328,7 +289,7 @@ export default function App() {
   );
 
   // Handlers
-  const handleAddProcess = (e: React.FormEvent) => {
+  const handleAddProcess = (e) => {
     e.preventDefault();
     if (!newProcess.number || !newProcess.client) return;
     const item = {
@@ -343,7 +304,7 @@ export default function App() {
     setIsNewProcessOpen(false);
   };
 
-  const handleAddClient = (e: React.FormEvent) => {
+  const handleAddClient = (e) => {
     e.preventDefault();
     if (!newClient.name) return;
     const item = { id: Date.now().toString(), ...newClient };
@@ -352,7 +313,7 @@ export default function App() {
     setIsNewClientOpen(false);
   };
 
-  const handleAddDeadline = (e: React.FormEvent) => {
+  const handleAddDeadline = (e) => {
     e.preventDefault();
     if (!newDeadline.title) return;
     const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
@@ -361,79 +322,92 @@ export default function App() {
     setIsNewDeadlineOpen(false);
   };
 
-  // SE NÃO ESTIVER LOGADO -> EXIBE A TELA DE LOGIN
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 font-sans" style={{ backgroundColor: PALETTE.bordoEscuro }}>
-        <div className="w-full max-w-md p-8 rounded-2xl shadow-2xl border space-y-6" style={{ backgroundColor: PALETTE.bordoPrincipal, borderColor: PALETTE.dourado }}>
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-2 shadow-inner mb-1" style={{ borderColor: PALETTE.dourado, backgroundColor: PALETTE.bordoEscuro }}>
-              <Lock size={28} style={{ color: PALETTE.douradoClaro }} />
-            </div>
-            <h1 className="font-serif font-bold text-2xl tracking-wide uppercase" style={{ color: PALETTE.douradoClaro }}>
-              DRA. VALESKA MONTEIRO
-            </h1>
-            <p className="text-xs tracking-wider text-slate-200">
-              Advocacia & Consultoria Jurídica • Acesso Restrito
-            </p>
-          </div>
+  const updateDeadlineStatus = (id, newStatus) => {
+    setDeadlines(prev => prev.map(d => d.id === id ? { 
+      ...d, 
+      status: newStatus, 
+      completed: newStatus === 'Finalizado' 
+    } : d));
+  };
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            {authError && (
-              <div className="p-3 text-xs rounded-lg bg-rose-950/80 border border-rose-500 text-rose-200 text-center font-medium">
-                {authError}
-              </div>
-            )}
+  const handleMouseEnterItem = (e, item) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setHoverPos({
+      x: Math.min(Math.max(rect.left - 40, 10), window.innerWidth - 280),
+      y: rect.top < 220 ? rect.bottom + 8 : rect.top - 210
+    });
+    setHoveredDeadline(item);
+  };
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: PALETTE.douradoClaro }}>
-                E-mail Profissional
-              </label>
-              <input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-                className="w-full p-3 rounded-xl bg-black/20 border text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition"
-                style={{ borderColor: `${PALETTE.dourado}50` }}
-                required 
-              />
-            </div>
+  const handleMouseLeaveItem = () => {
+    setHoveredDeadline(null);
+  };
 
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider mb-1" style={{ color: PALETTE.douradoClaro }}>
-                Senha de Acesso
-              </label>
-              <input 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full p-3 rounded-xl bg-black/20 border text-white placeholder-slate-400 focus:outline-none focus:ring-2 transition"
-                style={{ borderColor: `${PALETTE.dourado}50` }}
-                required 
-              />
-            </div>
+  const handleAddTemplate = (e) => {
+    e.preventDefault();
+    if (!newTemplate.title) return;
+    const item = { id: Date.now().toString(), ...newTemplate };
+    setTemplates([item, ...templates]);
+    setSelectedTemplate(item);
+    setNewTemplate({ category: 'Cível / JEC', title: '', description: '', content: '' });
+    setIsNewTemplateOpen(false);
+  };
 
-            <button 
-              type="submit" 
-              disabled={loadingAuth}
-              className="w-full py-3.5 rounded-xl font-bold text-sm shadow-lg transition hover:brightness-110 active:scale-[0.99] mt-2 flex justify-center items-center gap-2"
-              style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
-            >
-              {loadingAuth ? 'A verificar credenciais...' : 'Entrar no Sistema'}
-            </button>
-          </form>
+  const handleRunScan = () => {
+    setIsScanning(true);
+    setTimeout(() => {
+      const newIntimacao = {
+        id: Date.now().toString(),
+        date: new Date().toISOString().split('T')[0],
+        court: 'TJES - Capixaba Push',
+        title: 'Nova Publicação Disponibilizada',
+        process: '5046388-53.2025.8.08.0048',
+        snippet: 'Publicação no Diário da Justiça referente a prazo para contestação de reconvenção...'
+      };
+      setScannedPush([newIntimacao, ...scannedPush]);
+      setIsScanning(false);
+    }, 1200);
+  };
 
-          <p className="text-[10px] text-center text-slate-300 opacity-80 pt-2 border-t" style={{ borderColor: `${PALETTE.dourado}30` }}>
-            Serra / ES • Conexão Criptografada via Supabase
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const handleMoveScanToAgenda = (item) => {
+    const agendaItem = {
+      id: Date.now().toString(),
+      title: item.title,
+      client: 'Cliente Relacionado ao Processo',
+      process: item.process,
+      court: item.court,
+      dueDate: '2026-11-05',
+      dueTime: '23:59',
+      type: 'FATAL',
+      status: 'Pendente',
+      completed: false
+    };
+    setDeadlines([...deadlines, agendaItem]);
+    setScannedPush(scannedPush.filter((s) => s.id !== item.id));
+  };
 
-  // SE ESTIVER LOGADO -> EXIBE O DASHBOARD COMPLETO
+  // Calendar Helpers
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  };
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  };
+
+  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+  const currentYear = currentDate.getFullYear();
+  const currentMonthIdx = currentDate.getMonth();
+  const monthName = currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
+  const totalDays = getDaysInMonth(currentYear, currentMonthIdx);
+  const firstDay = getFirstDayOfMonth(currentYear, currentMonthIdx);
+
+  const categories = ['Todas', ...Array.from(new Set(templates.map((t) => t.category)))];
+  const filteredTemplates = selectedCategory === 'Todas' ? templates : templates.filter((t) => t.category === selectedCategory);
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
       {/* FLOATING HOVER CARD FOR CALENDAR (Portal Strategy) */}
@@ -521,18 +495,10 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Footer Info & Logout */}
-        <div className="p-4 border-t space-y-3" style={{ borderColor: `${PALETTE.dourado}30` }}>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold text-rose-200 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/50 transition"
-          >
-            <LogOut size={14} /> Sair do Sistema
-          </button>
-          <div className="text-center text-[10px]" style={{ color: PALETTE.douradoClaro }}>
-            <p className="font-semibold">Serra / ES • OAB/ES</p>
-            <p className="opacity-60 mt-0.5">Sistema Advocacia v2.5</p>
-          </div>
+        {/* Footer Info */}
+        <div className="p-4 border-t text-center text-[10px]" style={{ borderColor: `${PALETTE.dourado}30`, color: PALETTE.douradoClaro }}>
+          <p className="font-semibold">Serra / ES • OAB/ES</p>
+          <p className="opacity-60 mt-0.5">Sistema Advocacia v2.5</p>
         </div>
       </aside>
 
@@ -777,14 +743,14 @@ export default function App() {
             </div>
           )}
 
-          {/* OUTRAS TABS DO SISTEMA (Processos, CRM, Agenda, etc.) */}
+          {/* DEMAIS MÓDULOS */}
           {activeTab !== 'dashboard' && (
             <div className="p-8 text-center rounded-2xl border bg-white shadow-sm space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
               <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.bordoPrincipal }}>
-                Módulo em Funcionamento
+                Módulo <span className="uppercase">{activeTab}</span>
               </h3>
               <p className="text-xs text-slate-600 max-w-md mx-auto">
-                Você está navegando pela aba <strong className="uppercase">{activeTab}</strong>. Todas as funcionalidades principais do seu painel continuam ativas!
+                Espaço em funcionamento normal.
               </p>
             </div>
           )}
