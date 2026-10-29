@@ -60,7 +60,7 @@ export default function App() {
   const [isNewDeadlineOpen, setIsNewDeadlineOpen] = useState(false);
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
 
-  // Filters & States
+  // Filters & Hover States
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
   const [hoveredDeadline, setHoveredDeadline] = useState(null);
@@ -89,6 +89,28 @@ export default function App() {
       honorarios: 18720,
       descontos: 1200,
       status: 'Aguardando Audiência'
+    },
+    {
+      id: '3',
+      number: '1000797-34.2026.8.13.0543',
+      client: 'Jucimara Carvalho Barreto',
+      action: 'Ação Monitória / Cumprimento de Sentença',
+      court: 'TJMG - Eproc',
+      value: 48900,
+      honorarios: 14670,
+      descontos: 800,
+      status: 'Fase de Execução'
+    },
+    {
+      id: '4',
+      number: '0001478-18.2026.5.17.0007',
+      client: 'Estevão dos Santos Pereira',
+      action: 'Reclamatória Trabalhista UNA',
+      court: 'TRT17 - 7ª Vara de Vitória',
+      value: 85000,
+      honorarios: 25500,
+      descontos: 2000,
+      status: 'Em andamento'
     }
   ]);
 
@@ -102,6 +124,18 @@ export default function App() {
       dueDate: '2026-10-28',
       dueTime: '23:59',
       type: 'FATAL',
+      status: 'Em Andamento',
+      completed: false
+    },
+    {
+      id: '2',
+      title: 'Audiência UNA Presencial TRT17',
+      client: 'Estevão dos Santos Pereira',
+      process: '0001478-18.2026.5.17.0007',
+      court: 'TRT17 - 7ª Vara',
+      dueDate: '2026-10-30',
+      dueTime: '14:00',
+      type: 'NORMAL',
       status: 'Em Andamento',
       completed: false
     }
@@ -278,9 +312,10 @@ export default function App() {
     );
   }
 
-  // PAINEL COMPLETO
+  // PAINEL PRINCIPAL DO SISTEMA
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoPrincipal }}>
+      {/* SIDEBAR */}
       <aside className="w-full md:w-64 border-r flex-shrink-0 flex flex-col justify-between" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
         <div>
           <div className="p-6 text-center border-b" style={{ borderColor: `${PALETTE.dourado}30` }}>
@@ -297,9 +332,13 @@ export default function App() {
           <nav className="p-3 space-y-1">
             {[
               { id: 'dashboard', label: 'Dashboard Executivo', icon: Briefcase },
+              { id: 'push', label: 'Varredura & Push', icon: Search },
               { id: 'processes', label: 'Gestão de Processos', icon: FileText },
               { id: 'crm', label: 'Clientes (CRM)', icon: Users },
-              { id: 'agenda', label: 'Agenda de Prazos', icon: CalendarIcon }
+              { id: 'agenda', label: 'Agenda de Prazos', icon: CalendarIcon },
+              { id: 'templates', label: 'Modelos de Peças', icon: Copy },
+              { id: 'finances', label: 'Apuração de Verbas', icon: DollarSign },
+              { id: 'calculadoras', label: 'Calculadoras Jurídicas', icon: Calculator }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -323,6 +362,7 @@ export default function App() {
           </nav>
         </div>
 
+        {/* Rodapé da Barra Lateral (Apenas o Botão de Sair) */}
         <div className="p-4 border-t" style={{ borderColor: `${PALETTE.dourado}30` }}>
           <button 
             onClick={handleLogout}
@@ -333,8 +373,9 @@ export default function App() {
         </div>
       </aside>
 
+      {/* ÁREA DE CONTEÚDO PRINCIPAL */}
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="px-6 py-5 border-b flex justify-between items-center shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
+        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.bordoEscuro, borderColor: PALETTE.bordoPrincipal }}>
           <div>
             <h2 className="font-serif font-bold text-lg text-white">
               Advocacia & Consultoria Jurídica
@@ -343,19 +384,44 @@ export default function App() {
               Dra. Valeska Monteiro • Serra / ES
             </p>
           </div>
+
+          <button
+            onClick={() => setIsNewProcessOpen(true)}
+            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md hover:brightness-110 transition"
+            style={{ backgroundColor: PALETTE.dourado, color: PALETTE.bordoEscuro }}
+          >
+            + Novo Processo
+          </button>
         </header>
 
         <div className="p-6 flex-1 overflow-y-auto">
-          <div className="p-5 rounded-2xl border bg-white shadow-sm space-y-4" style={{ borderColor: PALETTE.linhasBordas }}>
-            <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>
-              Painel Operacional Ativo
-            </h3>
-            <p className="text-xs text-slate-600">
-              O sistema está operacional com a verificação e redefinição de senhas habilitadas.
-            </p>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
+          {/* DASHBOARD EXECUTIVO COMPLETO */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              {/* Barra do Topo */}
+              <div className="p-4 rounded-2xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                      Painel Executivo
+                    </span>
+                    <span className="text-xs font-mono font-semibold" style={{ color: PALETTE.valoresReceber }}>
+                      • Conectado via API (Sync Ativo)
+                    </span>
+                  </div>
+                  <h3 className="font-serif font-bold text-lg mt-1" style={{ color: PALETTE.textoPrincipal }}>
+                    Resumo Operacional, Financeiro & Comercial
+                  </h3>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-white" style={{ borderColor: PALETTE.linhasBordas }}>
+                    <Filter size={14} style={{ color: PALETTE.dourado }} />
+                    <select className="bg-transparent font-bold focus:outline-none cursor-pointer">
+                      <option>Todos os Clientes / Regiões</option>
+                      <option>Espírito Santo (TJES / TRT17)</option>
+                      <option>Minas Gerais (TJMG)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1.5
