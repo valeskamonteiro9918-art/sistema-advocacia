@@ -762,11 +762,12 @@ export default function App() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold transition ${
-                    isActive ? 'shadow-md font-bold' : 'hover:bg-white/5 opacity-80'
+                    isActive ? 'shadow-md font-bold' : 'hover:bg-white/10'
                   }`}
                   style={{
                     backgroundColor: isActive ? PALETTE.bordoPrincipal : 'transparent',
-                    color: isActive ? '#FFFFFF' : PALETTE.fundoPagina
+                    // O menu tem fundo bordô também no modo escuro; nunca usar a cor do fundo da página no texto.
+                    color: isActive ? '#FFFFFF' : (isDarkMode ? '#F9FAFB' : PALETTE.fundoPagina)
                   }}
                 >
                   <Icon size={16} style={{ color: isActive ? PALETTE.douradoClaro : PALETTE.dourado }} />
