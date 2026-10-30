@@ -1171,10 +1171,6 @@ export default function App() {
     setAgendaSubTab('agenda');
     setPersistenceStatus(`Lançado na agenda em ${info.dueDate.split('-').reverse().join('/')} às ${info.dueTime}.`);
   };
-    setDeadlines(prev => [...prev, agendaItem]);
-    setProcessedScanKeys(prev => [...new Set([...prev, `${item.process}|${item.title}`])]);
-    setScannedPush(prev => prev.filter((s) => s.id !== item.id));
-  };
 
   // Calendar Helpers
   const nextMonth = () => {
