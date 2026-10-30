@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import {
   Briefcase,
@@ -150,6 +150,30 @@ async function saveOfficeDataLocally(payload: any): Promise<'indexedDB' | 'local
   } catch (error) {
     if (indexedDbSaved) return 'indexedDB';
     throw error;
+  }
+}
+
+// Guarda uma cópia local anterior à migração/antes de resolver conflitos,
+// sem sobrescrever uma cópia de recuperação já existente.
+async function saveRecoverySnapshotIfMissing(payload: any, key: string): Promise<void> {
+  try {
+    const db = await openOfficeDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(OFFICE_DB_STORE, 'readwrite');
+      const store = tx.objectStore(OFFICE_DB_STORE);
+      const getRequest = store.get(key);
+      getRequest.onsuccess = () => {
+        if (getRequest.result === undefined) store.put(payload, key);
+      };
+      getRequest.onerror = () => reject(getRequest.error || new Error('Não foi possível verificar a cópia de recuperação.'));
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error || new Error('Não foi possível guardar a cópia de recuperação.'));
+      tx.onabort = () => reject(tx.error || new Error('Cópia de recuperação cancelada.'));
+    });
+  } catch (error) {
+    // Fallback simples: preserva um snapshot no localStorage com chave exclusiva.
+    const existing = window.localStorage.getItem(key);
+    if (!existing) window.localStorage.setItem(key, JSON.stringify(payload));
   }
 }
 
@@ -536,13 +560,18 @@ export default function App() {
 
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
 
-  // --- PERSISTÊNCIA DOS DADOS DO ESCRITÓRIO ---
-  // IndexedDB é a base local principal (suporta mais dados que localStorage).
-  // Também tentamos sincronizar com Supabase quando a tabela office_app_state está configurada.
+  // --- PERSISTÊNCIA COMPARTILHADA DO ESCRITÓRIO ---
+  // O IndexedDB mantém uma cópia local. A fonte compartilhada das duas administradoras
+  // passa a ser public.office_workspace_state, acessada por meio de office_workspace_members.
+  // A tabela antiga office_app_state é preservada e não recebe novas gravações por este código.
   const [dataHydrated, setDataHydrated] = useState(false);
-  const [cloudHydratedUserId, setCloudHydratedUserId] = useState<string | null>(null);
+  const [sharedOfficeId, setSharedOfficeId] = useState<string | null>(null);
   const [persistenceStatus, setPersistenceStatus] = useState('Carregando dados...');
   const [lastSavedAt, setLastSavedAt] = useState('');
+  const localSnapshotRef = useRef<any | null>(null);
+  const cloudVersionRef = useRef<string | null>(null);
+  const skipNextCloudSaveRef = useRef(false);
+  const pendingCloudChangesRef = useRef(false);
 
   const applyPersistedOfficeData = (saved: any) => {
     if (!saved || typeof saved !== 'object') return;
@@ -563,22 +592,27 @@ export default function App() {
     if (saved.savedAt) setLastSavedAt(saved.savedAt);
   };
 
+  // Primeiro recupera o estado local. Antes de substituí-lo pelos dados compartilhados,
+  // conserva uma cópia de recuperação por usuário, sem apagar o conteúdo anterior.
   useEffect(() => {
     let active = true;
-    const hydrate = async () => {
+    const hydrateLocal = async () => {
       try {
         const saved = await loadSavedOfficeData();
         if (!active) return;
-        if (saved) applyPersistedOfficeData(saved);
-        setPersistenceStatus('Salvamento automático ativo');
+        if (saved) {
+          localSnapshotRef.current = saved;
+          applyPersistedOfficeData(saved);
+        }
+        setPersistenceStatus('Dados locais carregados; conectando ao escritório...');
       } catch (error) {
-        console.error('Não foi possível carregar os dados salvos do escritório:', error);
-        if (active) setPersistenceStatus('Falha ao carregar os dados locais');
+        console.error('Não foi possível carregar os dados locais:', error);
+        if (active) setPersistenceStatus('Falha ao carregar dados locais');
       } finally {
         if (active) setDataHydrated(true);
       }
     };
-    void hydrate();
+    void hydrateLocal();
     return () => { active = false; };
   }, []);
 
@@ -598,83 +632,177 @@ export default function App() {
     officeSettings
   });
 
-  // Salvamento local automático: exclusões e edições também são persistidas.
+  // Salvamento local automático como cópia de contingência neste navegador.
   useEffect(() => {
     if (!dataHydrated) return;
     let active = true;
     const timer = window.setTimeout(async () => {
       const payload = buildOfficePayload();
       try {
-        const storage = await saveOfficeDataLocally(payload);
+        await saveOfficeDataLocally(payload);
         if (!active) return;
-        setLastSavedAt(payload.savedAt);
-        if (!session?.user?.id || cloudHydratedUserId !== session.user.id) {
-          setPersistenceStatus(storage === 'indexedDB' ? 'Salvo neste dispositivo' : 'Salvo no armazenamento local');
+        if (!session?.user?.id || !sharedOfficeId) {
+          setPersistenceStatus('Salvo neste dispositivo · aguardando conexão do escritório');
         }
       } catch (error) {
-        console.error('Falha no salvamento automático:', error);
-        if (active) setPersistenceStatus('Erro ao salvar — exporte um backup');
+        console.error('Falha no salvamento local:', error);
+        if (active) setPersistenceStatus('Erro ao salvar localmente — não feche o aplicativo');
       }
     }, 150);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [dataHydrated, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings, session?.user?.id, cloudHydratedUserId]);
+  }, [dataHydrated, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings, session?.user?.id, sharedOfficeId]);
 
-  // Carrega primeiro o estado da conta autenticada para não sobrescrever a nuvem com dados vazios.
+  // Depois do login, localiza o escritório ao qual a usuária pertence e carrega a base comum.
   useEffect(() => {
     const userId = session?.user?.id;
     if (!dataHydrated || !userId) return;
     let active = true;
-    const hydrateCloud = async () => {
-      setPersistenceStatus('Sincronizando com a nuvem...');
+    const hydrateSharedOffice = async () => {
+      setPersistenceStatus('Verificando acesso ao escritório...');
       try {
-        const { data, error } = await supabase
-          .from('office_app_state')
-          .select('payload, saved_at')
+        const { data: membership, error: membershipError } = await supabase
+          .from('office_workspace_members')
+          .select('office_id, role')
           .eq('user_id', userId)
           .maybeSingle();
-        if (error) throw error;
-        if (!active) return;
-        const cloudPayload = data?.payload;
-        if (cloudPayload) {
-          const parsed = typeof cloudPayload === 'string' ? JSON.parse(cloudPayload) : cloudPayload;
-          applyPersistedOfficeData(parsed);
-          if (data?.saved_at) setLastSavedAt(data.saved_at);
+        if (membershipError) throw membershipError;
+        if (!membership?.office_id) {
+          if (active) setPersistenceStatus('Esta conta ainda não está vinculada ao escritório');
+          return;
         }
-        setCloudHydratedUserId(userId);
-        setPersistenceStatus('Sincronização com a nuvem ativa');
+
+        const { data: sharedState, error: sharedError } = await supabase
+          .from('office_workspace_state')
+          .select('payload, saved_at')
+          .eq('office_id', membership.office_id)
+          .maybeSingle();
+        if (sharedError) throw sharedError;
+        if (!sharedState?.payload) {
+          throw new Error('O espaço compartilhado foi encontrado, mas ainda não contém dados. Os dados locais foram preservados.');
+        }
+        if (!active) return;
+
+        // Preserva o conteúdo local desta instalação antes de carregar a cópia oficial compartilhada.
+        if (localSnapshotRef.current) {
+          await saveRecoverySnapshotIfMissing(
+            localSnapshotRef.current,
+            `vm-pre-shared-backup-${userId}`
+          );
+        }
+
+        const parsed = typeof sharedState.payload === 'string'
+          ? JSON.parse(sharedState.payload)
+          : sharedState.payload;
+        cloudVersionRef.current = sharedState.saved_at;
+        skipNextCloudSaveRef.current = true;
+        applyPersistedOfficeData(parsed);
+        setSharedOfficeId(membership.office_id);
+        if (sharedState.saved_at) setLastSavedAt(sharedState.saved_at);
+        setPersistenceStatus('Escritório compartilhado conectado');
       } catch (error) {
-        console.warn('Sincronização Supabase indisponível; os dados continuam salvos localmente.', error);
-        if (active) setPersistenceStatus('Salvo neste dispositivo · nuvem não configurada');
+        console.error('Não foi possível conectar ao escritório compartilhado:', error);
+        if (active) setPersistenceStatus('Falha na conexão compartilhada — dados locais preservados');
       }
     };
-    void hydrateCloud();
+    void hydrateSharedOffice();
     return () => { active = false; };
   }, [dataHydrated, session?.user?.id]);
 
-  // Grava na nuvem após pequenas pausas, agrupando alterações rápidas em um único salvamento.
+  // Salva o conjunto compartilhado com controle de versão. Se a outra administradora
+  // gravar primeiro, não sobrescreve silenciosamente a alteração dela: preserva uma cópia
+  // local da alteração pendente e carrega a versão mais recente da nuvem.
   useEffect(() => {
-    const userId = session?.user?.id;
-    if (!dataHydrated || !userId || cloudHydratedUserId !== userId) return;
+    if (!dataHydrated || !session?.user?.id || !sharedOfficeId) return;
+    if (skipNextCloudSaveRef.current) {
+      skipNextCloudSaveRef.current = false;
+      return;
+    }
     let active = true;
+    pendingCloudChangesRef.current = true;
     const timer = window.setTimeout(async () => {
       const payload = buildOfficePayload();
+      const expectedVersion = cloudVersionRef.current;
       try {
-        const { error } = await supabase.from('office_app_state').upsert({
-          user_id: userId,
-          payload,
-          saved_at: payload.savedAt
-        }, { onConflict: 'user_id' });
+        if (!expectedVersion) throw new Error('Versão da nuvem não identificada; atualização bloqueada para evitar sobrescrever dados.');
+        const { data: updated, error } = await supabase
+          .from('office_workspace_state')
+          .update({ payload, saved_at: payload.savedAt })
+          .eq('office_id', sharedOfficeId)
+          .eq('saved_at', expectedVersion)
+          .select('saved_at')
+          .maybeSingle();
         if (error) throw error;
+        if (!updated?.saved_at) {
+          const { data: latest, error: latestError } = await supabase
+            .from('office_workspace_state')
+            .select('payload, saved_at')
+            .eq('office_id', sharedOfficeId)
+            .maybeSingle();
+          if (latestError) throw latestError;
+          if (latest?.payload) {
+            await saveRecoverySnapshotIfMissing(
+              payload,
+              `vm-conflict-backup-${session.user.id}-${payload.savedAt.replace(/[^0-9]/g, '')}`
+            );
+            cloudVersionRef.current = latest.saved_at;
+            skipNextCloudSaveRef.current = true;
+            applyPersistedOfficeData(typeof latest.payload === 'string' ? JSON.parse(latest.payload) : latest.payload);
+            setLastSavedAt(latest.saved_at);
+            setPersistenceStatus('Outra administradora salvou primeiro. Sua alteração foi preservada nesta instalação; confira antes de reaplicá-la.');
+          } else {
+            throw new Error('Não foi possível recuperar a versão atual do escritório.');
+          }
+          return;
+        }
         if (!active) return;
-        setLastSavedAt(payload.savedAt);
+        cloudVersionRef.current = updated.saved_at;
+        setLastSavedAt(updated.saved_at);
         setPersistenceStatus('Salvo na nuvem');
       } catch (error) {
-        console.error('Falha ao sincronizar com Supabase:', error);
-        if (active) setPersistenceStatus('Salvo neste dispositivo · falha na nuvem');
+        console.error('Falha ao salvar no escritório compartilhado:', error);
+        if (active) setPersistenceStatus('Falha ao salvar na nuvem compartilhada — alterações locais preservadas');
+      } finally {
+        pendingCloudChangesRef.current = false;
       }
     }, 700);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [dataHydrated, session?.user?.id, cloudHydratedUserId, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings]);
+  }, [dataHydrated, session?.user?.id, sharedOfficeId, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings]);
+
+  // Atualiza a tela quando a outra administradora salvar alterações. A consulta é somente leitura;
+  // não substitui mudanças locais que ainda estejam aguardando sincronização.
+  useEffect(() => {
+    if (!sharedOfficeId) return;
+    let active = true;
+    const refreshSharedData = async () => {
+      if (pendingCloudChangesRef.current) return;
+      try {
+        const { data, error } = await supabase
+          .from('office_workspace_state')
+          .select('payload, saved_at')
+          .eq('office_id', sharedOfficeId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!active || !data?.payload || !data.saved_at) return;
+        if (data.saved_at !== cloudVersionRef.current && !pendingCloudChangesRef.current) {
+          const parsed = typeof data.payload === 'string' ? JSON.parse(data.payload) : data.payload;
+          cloudVersionRef.current = data.saved_at;
+          skipNextCloudSaveRef.current = true;
+          applyPersistedOfficeData(parsed);
+          setLastSavedAt(data.saved_at);
+          setPersistenceStatus('Dados atualizados com alterações do escritório');
+        }
+      } catch (error) {
+        console.warn('Não foi possível verificar atualizações do escritório:', error);
+      }
+    };
+    const interval = window.setInterval(refreshSharedData, 30000);
+    window.addEventListener('focus', refreshSharedData);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshSharedData);
+    };
+  }, [sharedOfficeId]);
 
   // Financial selected process object
   const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
