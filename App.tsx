@@ -983,68 +983,194 @@ export default function App() {
   };
 
  
-const handleRunScan = async () => {
-  setIsScanning(true);
+// --- VARREDURA AUTOMÁTICA DO GMAIL: lê intimações, calcula o prazo e lança na agenda ---
+  const scanStateRef = useRef<any>({});
+  scanStateRef.current = { processedScanKeys, deadlines, scannedPush, processes };
+  const scanRunningRef = useRef(false);
 
-  try {
-    const { data, error } = await supabase.functions.invoke('gmail-scan');
+  const parseScanDate = (value: any): Date | null => {
+    const text = String(value || '').trim();
+    let m = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    m = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    return null;
+  };
+  const toISODate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-    if (error) throw error;
-
-    const intimacoes = data?.intimations ?? [];
-
-    if (!Array.isArray(intimacoes)) {
-      throw new Error('A resposta da consulta ao Gmail é inválida.');
+  // Conta dias úteis (art. 219 do CPC) a partir do dia seguinte ao da publicação.
+  // Não desconta feriados nem suspensões de expediente: sempre confira a contagem.
+  const addDays = (base: Date, n: number, uteis: boolean) => {
+    const d = new Date(base);
+    let left = n;
+    while (left > 0) {
+      d.setDate(d.getDate() + 1);
+      if (!uteis || (d.getDay() !== 0 && d.getDay() !== 6)) left -= 1;
     }
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return d;
+  };
 
-    setScannedPush(prev => {
-      const existentes = new Set(
-        prev.map(item => `${item.process}|${item.title}`)
-      );
+  const MESES: Record<string, number> = { janeiro: 0, fevereiro: 1, 'março': 2, marco: 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
 
-      const novas = intimacoes.filter(item => {
+  // Procura datas no texto ("12/11/2026 às 14:00h" ou "12 de novembro de 2026, às 14h").
+  const findDatesInText = (text: string) => {
+    const found: { d: Date; index: number; hh: string; mm: string }[] = [];
+    const timeAfter = (end: number) => {
+      const t = text.slice(end, end + 25).match(/^\s*(?:,|-)?\s*(?:às|as|a partir das|horário:?)?\s*(\d{1,2})\s*(?::|h)\s*(\d{2})?/i);
+      return { hh: t ? String(t[1]).padStart(2, '0') : '09', mm: t && t[2] ? t[2] : '00' };
+    };
+    const num = /(\d{2})\/(\d{2})\/(\d{4})/g;
+    let m: RegExpExecArray | null;
+    while ((m = num.exec(text))) {
+      found.push({ d: new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])), index: m.index, ...timeAfter(m.index + m[0].length) });
+    }
+    const ext = /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/gi;
+    while ((m = ext.exec(text))) {
+      found.push({ d: new Date(Number(m[3]), MESES[m[2].toLowerCase()], Number(m[1])), index: m.index, ...timeAfter(m.index + m[0].length) });
+    }
+    return found.filter(x => !Number.isNaN(x.d.getTime())).sort((x, y) => x.index - y.index);
+  };
+
+  // allowPast = true quando você clica manualmente em "Adicionar à Agenda".
+  const extractDeadlineInfo = (item: any, allowPast = false) => {
+    const text = `${item.title || ''} ${item.snippet || ''}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(item.dueDate || ''))) {
+      return { dueDate: item.dueDate, dueTime: item.dueTime || '23:59', type: item.type || 'FATAL' };
+    }
+    // Audiência/sessão/perícia: usa a data que a publicação menciona.
+    if (/audi[eê]ncia|sess[aã]o|per[ií]cia|designad/i.test(text)) {
+      const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+      const candidatas = findDatesInText(text).filter(x => allowPast || x.d >= hoje);
+      const kw = text.search(/audi[eê]ncia|sess[aã]o|per[ií]cia|designad/i);
+      const escolhida = candidatas.find(x => x.index >= kw && x.index - kw <= 200) || candidatas[0];
+      if (escolhida) {
+        return { dueDate: toISODate(escolhida.d), dueTime: `${escolhida.hh}:${escolhida.mm}`, type: 'NORMAL' };
+      }
+    }
+    // Prazo em dias: "prazo de 15 dias úteis"
+    const prazo = text.match(/prazo\s+(?:de|sucessivo de|comum de)?\s*(\d{1,3})\s*(?:\(\w+\)\s*)?dias?\s*(úteis|uteis|corridos)?/i);
+    const base = parseScanDate(item.date);
+    if (prazo && base) {
+      const uteis = !/corridos/i.test(prazo[2] || '');
+      return { dueDate: toISODate(addDays(base, Number(prazo[1]), uteis)), dueTime: '23:59', type: 'FATAL' };
+    }
+    return null;
+  };
+
+  const handleRunScan = async (silent = false) => {
+    if (scanRunningRef.current) return;
+    scanRunningRef.current = true;
+    setIsScanning(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('gmail-scan');
+      if (error) throw error;
+
+      const intimacoes = data?.intimations ?? [];
+      if (!Array.isArray(intimacoes)) throw new Error('A resposta da consulta ao Gmail é inválida.');
+
+      const snap = scanStateRef.current;
+      const jaConhecidas = new Set<string>([
+        ...(snap.processedScanKeys || []),
+        ...(snap.scannedPush || []).map((x: any) => `${x.process}|${x.title}`),
+        ...(snap.deadlines || []).map((x: any) => `${x.process}|${x.title}`)
+      ]);
+
+      const novasAgenda: any[] = [];
+      const paraRevisar: any[] = [];
+      const chavesNovas: string[] = [];
+
+      intimacoes.forEach((item: any, index: number) => {
         const chave = `${item.process}|${item.title}`;
+        if (!item.process || !item.title || jaConhecidas.has(chave)) return;
+        jaConhecidas.add(chave);
 
-        return item.process &&
-          item.title &&
-          !existentes.has(chave) &&
-          !processedScanKeys.includes(chave);
+        const info = extractDeadlineInfo(item);
+        if (info) {
+          const proc = (snap.processes || []).find((p: any) => p.number === item.process);
+          novasAgenda.push({
+            id: `scan-${Date.now()}-${index}`,
+            title: item.title,
+            client: proc?.client || item.client || 'Cliente relacionado ao processo',
+            process: item.process,
+            court: item.court || proc?.court || '',
+            dueDate: info.dueDate,
+            dueTime: info.dueTime,
+            type: info.type,
+            status: 'Pendente',
+            completed: false,
+            origem: 'gmail'
+          });
+          chavesNovas.push(chave);
+        } else {
+          // Sem prazo identificável no texto: fica na Varredura para você definir a data.
+          paraRevisar.push({ id: item.id || `push-${Date.now()}-${index}`, ...item });
+        }
       });
 
-      return [...novas, ...prev];
-    });
+      if (novasAgenda.length) {
+        setDeadlines(prev => [...novasAgenda, ...prev]);
+        setProcessedScanKeys(prev => [...new Set([...prev, ...chavesNovas])]);
+      }
+      if (paraRevisar.length) setScannedPush(prev => [...paraRevisar, ...prev]);
 
-    if (intimacoes.length === 0) {
-      setPersistenceStatus('Nenhuma nova intimação ou publicação encontrada no Gmail.');
-    } else {
       setPersistenceStatus(
-        `${intimacoes.length} mensagem(ns) judicial(is) encontrada(s). Confira a Varredura.`
+        novasAgenda.length || paraRevisar.length
+          ? `Gmail: ${novasAgenda.length} prazo(s) lançado(s) na agenda; ${paraRevisar.length} para conferir na Varredura.`
+          : 'Gmail verificado: nenhuma nova intimação ou publicação.'
       );
+    } catch (error) {
+      console.error('Erro na varredura do Gmail:', error);
+      setPersistenceStatus('Não foi possível consultar o Gmail. Verifique a conexão.');
+      if (!silent) window.alert('Não foi possível consultar o Gmail agora. Tente novamente em instantes.');
+    } finally {
+      scanRunningRef.current = false;
+      setIsScanning(false);
     }
-  } catch (error) {
-    console.error('Erro na varredura do Gmail:', error);
-    setPersistenceStatus(
-      'Não foi possível consultar o Gmail. Verifique a conexão.'
-    );
-  } finally {
-    setIsScanning(false);
-  }
-};
+  };
 
+  // Varredura automática: ao conectar ao escritório e depois a cada 30 minutos.
+  const runScanRef = useRef(handleRunScan);
+  runScanRef.current = handleRunScan;
+  useEffect(() => {
+    if (!sharedOfficeId || !session?.user?.id) return;
+    const first = window.setTimeout(() => { void runScanRef.current(true); }, 4000);
+    const interval = window.setInterval(() => { void runScanRef.current(true); }, 30 * 60 * 1000);
+    return () => { window.clearTimeout(first); window.clearInterval(interval); };
+  }, [sharedOfficeId, session?.user?.id]);
 
   const handleMoveScanToAgenda = (item) => {
+    let info: any = extractDeadlineInfo(item, true);
+    if (!info) {
+      const resposta = window.prompt('Não encontrei a data na publicação. Informe a data do prazo ou da audiência (dd/mm/aaaa):');
+      const d = parseScanDate(resposta || '');
+      if (!d) { if (resposta) window.alert('Data inválida. Use o formato dd/mm/aaaa.'); return; }
+      info = { dueDate: toISODate(d), dueTime: '23:59', type: 'FATAL' };
+    }
+    const proc = processes.find((p) => p.number === item.process);
     const agendaItem = {
       id: Date.now().toString(),
       title: item.title,
-      client: 'Cliente Relacionado ao Processo',
+      client: proc?.client || 'Cliente Relacionado ao Processo',
       process: item.process,
-      court: item.court,
-      dueDate: '2026-11-05',
-      dueTime: '23:59',
-      type: 'FATAL',
+      court: item.court || proc?.court || '',
+      dueDate: info.dueDate,
+      dueTime: info.dueTime,
+      type: info.type,
       status: 'Pendente',
       completed: false
     };
+    setDeadlines(prev => [...prev, agendaItem]);
+    setProcessedScanKeys(prev => [...new Set([...prev, `${item.process}|${item.title}`])]);
+    setScannedPush(prev => prev.filter((s) => s.id !== item.id));
+    // Leva você direto ao mês/dia na Agenda.
+    const [y, m] = info.dueDate.split('-').map(Number);
+    setCurrentDate(new Date(y, m - 1, 1));
+    setCalendarView('grid');
+    setAgendaSubTab('agenda');
+    setPersistenceStatus(`Lançado na agenda em ${info.dueDate.split('-').reverse().join('/')} às ${info.dueTime}.`);
+  };
     setDeadlines(prev => [...prev, agendaItem]);
     setProcessedScanKeys(prev => [...new Set([...prev, `${item.process}|${item.title}`])]);
     setScannedPush(prev => prev.filter((s) => s.id !== item.id));
@@ -1685,12 +1811,12 @@ const handleRunScan = async () => {
                     Varredura Eletrônica & Notificações Push
                   </h3>
                   <p className="text-xs" style={{ color: PALETTE.textoApoio }}>
-                    Monitoramento em tempo real nos Diários Eletrônicos (TJES, TRT17, TJMG).
+                    Seu Gmail é verificado automaticamente a cada 30 minutos; prazos identificados entram direto na Agenda.
                   </p>
                 </div>
 
                 <button
-                  onClick={handleRunScan}
+                  onClick={() => handleRunScan(false)}
                   disabled={isScanning}
                   className="px-4 py-2.5 rounded-xl font-bold text-xs text-white flex items-center gap-2 shadow hover:brightness-110 transition shrink-0 disabled:opacity-50"
                   style={{ backgroundColor: PALETTE.bordoPrincipal }}
