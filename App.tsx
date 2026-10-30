@@ -982,26 +982,55 @@ export default function App() {
     e.target.value = '';
   };
 
-  const handleRunScan = () => {
-    setIsScanning(true);
-    setTimeout(() => {
-      const newIntimacao = {
-        id: Date.now().toString(),
-        date: new Date().toISOString().split('T')[0],
-        court: 'TJES - Capixaba Push',
-        title: 'Nova Publicação Disponibilizada',
-        process: '5046388-53.2025.8.08.0048',
-        snippet: 'Publicação no Diário da Justiça referente a prazo para contestação de reconvenção...'
-      };
-      const scanKey = `${newIntimacao.process}|${newIntimacao.title}`;
-      setScannedPush(prev => {
-        const alreadyProcessed = processedScanKeys.includes(scanKey);
-        const alreadyVisible = prev.some(item => `${item.process}|${item.title}` === scanKey);
-        return alreadyProcessed || alreadyVisible ? prev : [newIntimacao, ...prev];
+ 
+const handleRunScan = async () => {
+  setIsScanning(true);
+
+  try {
+    const { data, error } = await supabase.functions.invoke('gmail-scan');
+
+    if (error) throw error;
+
+    const intimacoes = data?.intimations ?? [];
+
+    if (!Array.isArray(intimacoes)) {
+      throw new Error('A resposta da consulta ao Gmail é inválida.');
+    }
+
+    setScannedPush(prev => {
+      const existentes = new Set(
+        prev.map(item => `${item.process}|${item.title}`)
+      );
+
+      const novas = intimacoes.filter(item => {
+        const chave = `${item.process}|${item.title}`;
+
+        return item.process &&
+          item.title &&
+          !existentes.has(chave) &&
+          !processedScanKeys.includes(chave);
       });
-      setIsScanning(false);
-    }, 1200);
-  };
+
+      return [...novas, ...prev];
+    });
+
+    if (intimacoes.length === 0) {
+      setPersistenceStatus('Nenhuma nova intimação ou publicação encontrada no Gmail.');
+    } else {
+      setPersistenceStatus(
+        `${intimacoes.length} mensagem(ns) judicial(is) encontrada(s). Confira a Varredura.`
+      );
+    }
+  } catch (error) {
+    console.error('Erro na varredura do Gmail:', error);
+    setPersistenceStatus(
+      'Não foi possível consultar o Gmail. Verifique a conexão.'
+    );
+  } finally {
+    setIsScanning(false);
+  }
+};
+
 
   const handleMoveScanToAgenda = (item) => {
     const agendaItem = {
