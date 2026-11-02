@@ -1720,8 +1720,8 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
         {/* Footer Info & Botão Sair */}
         <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'} border-t text-center text-[10px]`} style={{ borderColor: MENU_PALETTE.linha, color: MENU_PALETTE.destaque }}>
           {!isSidebarCollapsed && <>
-            <p className="font-semibold">Serra / ES • OAB/ES</p>
-            <p className="mt-0.5 mb-3" style={{ color: MENU_PALETTE.subtitulo }}>Sistema Advocacia v2.5</p>
+            <p className="font-semibold"></p>
+            <p className="mt-0.5 mb-3" style={{ color: MENU_PALETTE.subtitulo }}></p>
           </>}
           <button
             type="button"
