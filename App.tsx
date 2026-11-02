@@ -34,7 +34,11 @@ import {
   FileUp,
   CheckCircle2,
   Clock3,
-  Target
+  Target,
+  Paperclip,
+  CheckSquare,
+  MessageSquare,
+  Clock
 } from 'lucide-react';
 
 const MENU_PALETTE = {
@@ -348,12 +352,65 @@ export default function App() {
   // Histórico processual e rascunhos de comunicação: nunca enviam mensagens automaticamente.
   const [processMovements, setProcessMovements] = useState<any[]>([]);
   const [clientMessageDrafts, setClientMessageDrafts] = useState<any[]>([]);
+  // --- MÓDULO DE TAREFAS ESTILO BITRIX24 ---
   const [taskDraft, setTaskDraft] = useState('');
   const [taskFilter, setTaskFilter] = useState('Todas');
-  const [tasks, setTasks] = useState([
-    { id: 't1', title: 'Revisar publicação e definir providências', description: 'Conferir prazo e estratégia processual', status: 'A fazer', priority: 'Alta', dueDate: '2026-10-30', assignee: 'Dra. Valeska' },
-    { id: 't2', title: 'Preparar documentos para audiência', description: 'Validar documentos com o cliente', status: 'Em andamento', priority: 'Média', dueDate: '2026-11-03', assignee: 'Dra. Valeska' },
-    { id: 't3', title: 'Conferir cálculo de verbas', description: 'Revisar valores e descontos', status: 'Em revisão', priority: 'Alta', dueDate: '2026-11-05', assignee: 'Dra. Valeska' }
+  const [taskSearch, setTaskSearch] = useState('');
+  const [selectedTaskModal, setSelectedTaskModal] = useState<any>(null);
+  const [newCheckitemText, setNewCheckitemText] = useState('');
+  const [newCommentText, setNewCommentText] = useState('');
+
+  const [tasks, setTasks] = useState<any[]>([
+    {
+      id: 't1',
+      title: 'Revisar publicação e definir providências',
+      description: 'Conferir prazo e estratégia processual para réplica.',
+      status: 'A fazer',
+      priority: 'Alta',
+      dueDate: '2026-10-30',
+      createdBy: 'Dra. Valeska',
+      assignee: 'Dra. Valeska',
+      process: '5046388-53.2025.8.08.0048',
+      estimatedTime: '2h',
+      checklist: [
+        { id: 'c1', text: 'Ler publicação no Diário', completed: true },
+        { id: 'c2', text: 'Contatar cliente para validar fatos', completed: false }
+      ],
+      attachments: [],
+      comments: [
+        { id: 'cm1', author: 'Dra. Valeska', date: '2026-10-28 14:30', text: 'Aguardando documento complementar do cliente.' }
+      ]
+    },
+    {
+      id: 't2',
+      title: 'Preparar documentos para audiência',
+      description: 'Validar comprovantes e relatórios com o cliente.',
+      status: 'Em andamento',
+      priority: 'Média',
+      dueDate: '2026-11-03',
+      createdBy: 'Dra. Valeska',
+      assignee: 'Dra. Valeska',
+      process: '0001083-23.2026.5.17.0008',
+      estimatedTime: '4h',
+      checklist: [],
+      attachments: [],
+      comments: []
+    },
+    {
+      id: 't3',
+      title: 'Conferir cálculo de verbas',
+      description: 'Revisar valores e descontos na planilha trabalhista.',
+      status: 'Em revisão',
+      priority: 'Alta',
+      dueDate: '2026-11-05',
+      createdBy: 'Dra. Valeska',
+      assignee: 'Secretaria / Apoio',
+      process: '0001478-18.2026.5.17.0007',
+      estimatedTime: '1h 30m',
+      checklist: [],
+      attachments: [],
+      comments: []
+    }
   ]);
 
   // Form States
@@ -913,19 +970,111 @@ export default function App() {
     setEditingItem(null);
   };
 
-  const addTask = (e) => {
+  // --- MÉTODOS DE MANIPULAÇÃO DE TAREFAS ---
+  const addTask = (e?: any) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     const title = String(taskDraft || '').trim();
     if (!title) {
-      window.alert('Digite o nome da tarefa antes de clicar em Criar.');
+      window.alert('Digite o nome da tarefa antes de criar.');
       return;
     }
-    const newTask = { id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title, description: '', status: 'A fazer', priority: 'Média', dueDate: '', assignee: 'Dra. Valeska' };
+    const newTask = {
+      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title,
+      description: '',
+      status: 'A fazer',
+      priority: 'Média',
+      dueDate: '',
+      createdBy: 'Dra. Valeska',
+      assignee: 'Dra. Valeska',
+      process: '',
+      estimatedTime: '',
+      checklist: [],
+      attachments: [],
+      comments: []
+    };
     setTasks(prev => [newTask, ...prev]);
     setTaskDraft('');
   };
 
-  const moveTask = (taskId, status) => setTasks(prev => prev.map(task => task.id === taskId ? { ...task, status } : task));
+  const moveTask = (taskId: string, status: string) => {
+    setTasks(prev => prev.map(task => task.id === taskId ? { ...task, status } : task));
+    if (selectedTaskModal && selectedTaskModal.id === taskId) {
+      setSelectedTaskModal((prev: any) => ({ ...prev, status }));
+    }
+  };
+
+  const saveSelectedTaskModal = () => {
+    if (!selectedTaskModal) return;
+    setTasks(prev => prev.map(t => t.id === selectedTaskModal.id ? selectedTaskModal : t));
+    setSelectedTaskModal(null);
+  };
+
+  const addCheckitemToTaskModal = () => {
+    if (!newCheckitemText.trim() || !selectedTaskModal) return;
+    const item = { id: `item-${Date.now()}`, text: newCheckitemText.trim(), completed: false };
+    const updatedChecklist = [...(selectedTaskModal.checklist || []), item];
+    const updated = { ...selectedTaskModal, checklist: updatedChecklist };
+    setSelectedTaskModal(updated);
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+    setNewCheckitemText('');
+  };
+
+  const toggleCheckitemTaskModal = (itemId: string) => {
+    if (!selectedTaskModal) return;
+    const updatedChecklist = (selectedTaskModal.checklist || []).map((c: any) =>
+      c.id === itemId ? { ...c, completed: !c.completed } : c
+    );
+    const updated = { ...selectedTaskModal, checklist: updatedChecklist };
+    setSelectedTaskModal(updated);
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+  };
+
+  const removeCheckitemTaskModal = (itemId: string) => {
+    if (!selectedTaskModal) return;
+    const updatedChecklist = (selectedTaskModal.checklist || []).filter((c: any) => c.id !== itemId);
+    const updated = { ...selectedTaskModal, checklist: updatedChecklist };
+    setSelectedTaskModal(updated);
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+  };
+
+  const addCommentToTaskModal = () => {
+    if (!newCommentText.trim() || !selectedTaskModal) return;
+    const now = new Date();
+    const comment = {
+      id: `cm-${Date.now()}`,
+      author: 'Dra. Valeska',
+      date: `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      text: newCommentText.trim()
+    };
+    const updatedComments = [...(selectedTaskModal.comments || []), comment];
+    const updated = { ...selectedTaskModal, comments: updatedComments };
+    setSelectedTaskModal(updated);
+    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+    setNewCommentText('');
+  };
+
+  const handleTaskAttachmentFile = (file: File | undefined) => {
+    if (!file || !selectedTaskModal) return;
+    if (file.size > 1024 * 1024) {
+      window.alert('Para manter o armazenamento estável, escolha um arquivo de até 1 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const attachment = {
+        id: `att-${Date.now()}`,
+        fileName: file.name,
+        size: file.size,
+        dataUrl: String(reader.result || '')
+      };
+      const updatedAttachments = [...(selectedTaskModal.attachments || []), attachment];
+      const updated = { ...selectedTaskModal, attachments: updatedAttachments };
+      setSelectedTaskModal(updated);
+      setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAddLead = (e) => {
     e.preventDefault();
@@ -2484,56 +2633,204 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             </div>
           )}
 
-          {/* TAB: TAREFAS - QUADRO DINÂMICO */}
+          {/* TAB: TAREFAS - QUADRO DINÂMICO BITRIX24 */}
           {activeTab === 'tasks' && (
             <div className="space-y-5">
               <div className="p-6 rounded-2xl border shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Quadro de Tarefas</h3>
-                    <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Organize atividades por etapa, prioridade e prazo. Arraste os cartões entre as colunas.</p>
+                    <h3 className="font-serif font-bold text-lg flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
+                      <ClipboardList size={22} style={{ color: PALETTE.bordoPrincipal }} />
+                      Quadro de Tarefas (Bitrix24)
+                    </h3>
+                    <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>
+                      Gerencie demandas, criadores, responsáveis, checklists, prazos e anexos. Clique no cartão para abrir a edição completa.
+                    </p>
                   </div>
                   <form onSubmit={e => { e.preventDefault(); addTask(); }} className="flex gap-2 w-full md:w-auto">
-                    <input value={taskDraft} onChange={e => setTaskDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } }} placeholder="Nome da nova tarefa..." aria-label="Nome da nova tarefa" className="flex-1 md:w-64 p-2.5 border rounded-xl text-xs bg-white" style={{ borderColor: PALETTE.linhasBordas }} />
-                    <button type="button" onClick={() => addTask()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Criar</button>
+                    <input
+                      value={taskDraft}
+                      onChange={e => setTaskDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } }}
+                      placeholder="Nome da nova tarefa..."
+                      className="flex-1 md:w-64 p-2.5 border rounded-xl text-xs bg-white"
+                      style={{ borderColor: PALETTE.linhasBordas }}
+                    />
+                    <button type="button" onClick={() => addTask()} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1 shadow hover:brightness-110 transition" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                      <Plus size={14}/> Criar Tarefa
+                    </button>
                   </form>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <button onClick={() => setTaskFilter('Todas')} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: taskFilter === 'Todas' ? PALETTE.bordoPrincipal : PALETTE.fundoCartoes, color: taskFilter === 'Todas' ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>Todas</button>
-                  {['Alta', 'Média', 'Baixa'].map(priority => <button key={priority} onClick={() => setTaskFilter(priority)} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ backgroundColor: taskFilter === priority ? PALETTE.bordoPrincipal : PALETTE.fundoCartoes, color: taskFilter === priority ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{priority} prioridade</button>)}
+
+                {/* Filtros no topo */}
+                <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setTaskFilter('Todas')} className="px-3 py-1.5 rounded-lg text-xs font-bold border transition" style={{ backgroundColor: taskFilter === 'Todas' ? PALETTE.bordoPrincipal : PALETTE.fundoCartoes, color: taskFilter === 'Todas' ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>
+                      Todas ({tasks.length})
+                    </button>
+                    {['Alta', 'Média', 'Baixa'].map(priority => (
+                      <button key={priority} onClick={() => setTaskFilter(priority)} className="px-3 py-1.5 rounded-lg text-xs font-bold border transition" style={{ backgroundColor: taskFilter === priority ? PALETTE.bordoPrincipal : PALETTE.fundoCartoes, color: taskFilter === priority ? '#fff' : PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>
+                        {priority} prioridade
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Search size={14} style={{ color: PALETTE.textoApoio }} />
+                    <input
+                      type="text"
+                      value={taskSearch}
+                      onChange={e => setTaskSearch(e.target.value)}
+                      placeholder="Buscar por título, responsável ou processo..."
+                      className="p-1.5 px-3 border rounded-lg text-xs w-60"
+                      style={{ borderColor: PALETTE.linhasBordas }}
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Colunas Kanban */}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
                 {['A fazer', 'Em andamento', 'Em revisão', 'Concluída'].map(status => {
-                  const columnTasks = tasks.filter(task => task.status === status && (taskFilter === 'Todas' || task.priority === taskFilter));
-                  return <section key={status} onDragOver={e => e.preventDefault()} onDrop={e => { const id = e.dataTransfer.getData('text/plain'); if (id) moveTask(id, status); }} className="rounded-2xl border p-3 min-h-72" style={{ backgroundColor: PALETTE.caixaTotal, borderColor: PALETTE.linhasBordas }}>
-                    <div className="flex items-center justify-between px-1 pb-3">
-                      <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: PALETTE.bordoEscuro }}>{status}</h4>
-                      <span className="text-[10px] rounded-full px-2 py-1 bg-white font-bold">{columnTasks.length}</span>
-                    </div>
-                    <div className="space-y-3">
-                      {columnTasks.map(task => <article key={task.id} draggable onDragStart={e => e.dataTransfer.setData('text/plain', task.id)} className="p-3 rounded-xl bg-white border shadow-sm cursor-grab active:cursor-grabbing space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
-                        <div className="flex justify-between gap-2 items-start">
-                          <h5 className="text-xs font-bold leading-relaxed" style={{ color: PALETTE.textoPrincipal }}>{task.title}</h5>
-                          <button onClick={() => { if (window.confirm('Excluir esta tarefa?')) setTasks(prev => prev.filter(t => t.id !== task.id)); }} title="Excluir tarefa" className="text-amber-700"><Trash2 size={13}/></button>
-                        </div>
-                        {task.description && <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>{task.description}</p>}
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="text-[9px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: task.priority === 'Alta' ? (isDarkMode ? '#453621' : '#FBEDD4') : task.priority === 'Média' ? (isDarkMode ? '#3A3325' : '#F5F1E7') : (isDarkMode ? '#17382F' : '#DDF4E9'), color: task.priority === 'Alta' ? (isDarkMode ? '#F59E0B' : '#8B5E1A') : task.priority === 'Média' ? (isDarkMode ? '#F5EEE9' : '#775B28') : (isDarkMode ? '#34D399' : '#24624D') }}>{task.priority}</span>
-                          {task.dueDate && <span className="text-[9px] px-2 py-1 rounded-full bg-slate-100 text-slate-600">{task.dueDate}</span>}
-                        </div>
-                        <div className="flex gap-1 pt-1">
-                          <select aria-label="Prioridade da tarefa" value={task.priority} onChange={e => setTasks(prev => prev.map(t => t.id === task.id ? { ...t, priority: e.target.value } : t))} className="min-w-0 flex-1 text-[10px] border rounded p-1 bg-white">
-                            <option>Alta</option><option>Média</option><option>Baixa</option>
-                          </select>
-                          <select aria-label="Mover tarefa" value={task.status} onChange={e => moveTask(task.id, e.target.value)} className="min-w-0 flex-1 text-[10px] border rounded p-1 bg-white">
-                            {['A fazer', 'Em andamento', 'Em revisão', 'Concluída'].map(s => <option key={s}>{s}</option>)}
-                          </select>
-                        </div>
-                      </article>)}
-                      {columnTasks.length === 0 && <p className="text-[10px] text-center py-8 opacity-60">Solte uma tarefa aqui</p>}
-                    </div>
-                  </section>;
+                  const columnTasks = tasks.filter(task => {
+                    const matchesStatus = task.status === status;
+                    const matchesFilter = taskFilter === 'Todas' || task.priority === taskFilter;
+                    const matchesSearch = !taskSearch.trim() ||
+                      task.title.toLowerCase().includes(taskSearch.toLowerCase()) ||
+                      (task.assignee && task.assignee.toLowerCase().includes(taskSearch.toLowerCase())) ||
+                      (task.process && task.process.toLowerCase().includes(taskSearch.toLowerCase()));
+                    return matchesStatus && matchesFilter && matchesSearch;
+                  });
+
+                  return (
+                    <section
+                      key={status}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        const id = e.dataTransfer.getData('text/plain');
+                        if (id) moveTask(id, status);
+                      }}
+                      className="rounded-2xl border p-3 min-h-[350px]"
+                      style={{ backgroundColor: PALETTE.caixaTotal, borderColor: PALETTE.linhasBordas }}
+                    >
+                      <div className="flex items-center justify-between px-1 pb-3 border-b mb-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                        <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: PALETTE.bordoEscuro }}>{status}</h4>
+                        <span className="text-[10px] rounded-full px-2 py-0.5 bg-white font-bold border" style={{ borderColor: PALETTE.linhasBordas }}>
+                          {columnTasks.length}
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {columnTasks.map(task => {
+                          const completedCheck = (task.checklist || []).filter((c: any) => c.completed).length;
+                          const totalCheck = (task.checklist || []).length;
+
+                          return (
+                            <article
+                              key={task.id}
+                              draggable
+                              onDragStart={e => e.dataTransfer.setData('text/plain', task.id)}
+                              onClick={() => setSelectedTaskModal({ ...task })}
+                              className="p-3.5 rounded-xl bg-white border shadow-sm cursor-pointer hover:border-amber-400 transition space-y-2.5 relative group"
+                              style={{ borderColor: PALETTE.linhasBordas }}
+                            >
+                              <div className="flex justify-between items-start gap-2">
+                                <h5 className="text-xs font-bold leading-relaxed pr-6" style={{ color: PALETTE.textoPrincipal }}>
+                                  {task.title}
+                                </h5>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm('Excluir esta tarefa?')) {
+                                      setTasks(prev => prev.filter(t => t.id !== task.id));
+                                    }
+                                  }}
+                                  title="Excluir tarefa"
+                                  className="text-amber-700 opacity-60 hover:opacity-100 p-1"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+
+                              {task.description && (
+                                <p className="text-[10px] line-clamp-2" style={{ color: PALETTE.textoApoio }}>
+                                  {task.description}
+                                </p>
+                              )}
+
+                              {/* Vínculo com processo */}
+                              {task.process && (
+                                <div className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 truncate">
+                                  Proc: {task.process}
+                                </div>
+                              )}
+
+                              {/* Indicadores estilo Bitrix24 */}
+                              <div className="flex flex-wrap items-center gap-2 text-[9px]" style={{ color: PALETTE.textoApoio }}>
+                                {totalCheck > 0 && (
+                                  <span className={`flex items-center gap-1 font-semibold ${completedCheck === totalCheck ? 'text-emerald-700' : ''}`}>
+                                    <CheckSquare size={11} /> {completedCheck}/{totalCheck}
+                                  </span>
+                                )}
+                                {(task.comments || []).length > 0 && (
+                                  <span className="flex items-center gap-1 font-semibold">
+                                    <MessageSquare size={11} /> {(task.comments || []).length}
+                                  </span>
+                                )}
+                                {(task.attachments || []).length > 0 && (
+                                  <span className="flex items-center gap-1 font-semibold">
+                                    <Paperclip size={11} /> {(task.attachments || []).length}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Prioridade e Prazos */}
+                              <div className="flex flex-wrap items-center justify-between gap-1 pt-1 border-t" style={{ borderColor: PALETTE.linhasBordas }}>
+                                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: task.priority === 'Alta' ? '#FBEDD4' : task.priority === 'Média' ? '#F5F1E7' : '#DDF4E9', color: task.priority === 'Alta' ? '#8B5E1A' : task.priority === 'Média' ? '#775B28' : '#24624D' }}>
+                                  {task.priority}
+                                </span>
+                                {task.dueDate && (
+                                  <span className="text-[9px] font-semibold flex items-center gap-1 text-slate-600">
+                                    <Clock size={10} /> {task.dueDate}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Usuários envolvidos */}
+                              <div className="flex justify-between items-center text-[9px] pt-1 text-slate-500">
+                                <span>Resp: <strong>{task.assignee || 'Dra. Valeska'}</strong></span>
+                                <span className="text-[8px] opacity-75">Criador: {task.createdBy || 'Dra. Valeska'}</span>
+                              </div>
+
+                              {/* Controles rápidos Inline */}
+                              <div className="flex gap-1 pt-1" onClick={e => e.stopPropagation()}>
+                                <select
+                                  aria-label="Prioridade da tarefa"
+                                  value={task.priority}
+                                  onChange={e => setTasks(prev => prev.map(t => t.id === task.id ? { ...t, priority: e.target.value } : t))}
+                                  className="min-w-0 flex-1 text-[9px] border rounded p-1 bg-white"
+                                >
+                                  <option>Alta</option>
+                                  <option>Média</option>
+                                  <option>Baixa</option>
+                                </select>
+                                <select
+                                  aria-label="Mover tarefa"
+                                  value={task.status}
+                                  onChange={e => moveTask(task.id, e.target.value)}
+                                  className="min-w-0 flex-1 text-[9px] border rounded p-1 bg-white font-bold"
+                                >
+                                  {['A fazer', 'Em andamento', 'Em revisão', 'Concluída'].map(s => <option key={s}>{s}</option>)}
+                                </select>
+                              </div>
+                            </article>
+                          );
+                        })}
+                        {columnTasks.length === 0 && <p className="text-[10px] text-center py-8 opacity-60">Nenhuma tarefa aqui</p>}
+                      </div>
+                    </section>
+                  );
                 })}
               </div>
             </div>
@@ -4616,6 +4913,256 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                     Salvar Alterações
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALHADO DE EDIÇÃO DA TAREFA (MODO BITRIX24) */}
+      {selectedTaskModal && (
+        <div className="fixed inset-0 bg-black/60 z-[10000] flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl max-h-[92vh] flex flex-col p-6 rounded-2xl bg-white shadow-2xl space-y-4 overflow-hidden">
+            {/* Cabeçalho do Modal */}
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center gap-2">
+                <ClipboardList size={20} style={{ color: PALETTE.bordoPrincipal }} />
+                <h3 className="font-serif font-bold text-base" style={{ color: PALETTE.bordoEscuro }}>
+                  Detalhes da Tarefa (Bitrix24)
+                </h3>
+              </div>
+              <button onClick={() => setSelectedTaskModal(null)} className="p-1 hover:bg-black/5 rounded"><X size={18} /></button>
+            </div>
+
+            {/* Corpo do Modal com rolagem */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+              {/* Título da Tarefa */}
+              <div>
+                <label className="font-bold block mb-1">Título da Tarefa</label>
+                <input
+                  type="text"
+                  value={selectedTaskModal.title}
+                  onChange={e => setSelectedTaskModal({ ...selectedTaskModal, title: e.target.value })}
+                  className="w-full p-2.5 border rounded-xl font-bold text-sm"
+                />
+              </div>
+
+              {/* Responsável, Criador, Status e Prioridade */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border">
+                <div>
+                  <label className="font-bold block text-[10px] uppercase text-slate-500 mb-1">Pessoa Responsável</label>
+                  <input
+                    type="text"
+                    value={selectedTaskModal.assignee || 'Dra. Valeska'}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, assignee: e.target.value })}
+                    className="w-full p-2 border rounded-lg bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block text-[10px] uppercase text-slate-500 mb-1">Criado Por (Autor)</label>
+                  <input
+                    type="text"
+                    value={selectedTaskModal.createdBy || 'Dra. Valeska'}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, createdBy: e.target.value })}
+                    className="w-full p-2 border rounded-lg bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block text-[10px] uppercase text-slate-500 mb-1">Status / Coluna</label>
+                  <select
+                    value={selectedTaskModal.status}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, status: e.target.value })}
+                    className="w-full p-2 border rounded-lg bg-white font-bold"
+                  >
+                    {['A fazer', 'Em andamento', 'Em revisão', 'Concluída'].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold block text-[10px] uppercase text-slate-500 mb-1">Prioridade</label>
+                  <select
+                    value={selectedTaskModal.priority}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, priority: e.target.value })}
+                    className="w-full p-2 border rounded-lg bg-white"
+                  >
+                    <option>Alta</option>
+                    <option>Média</option>
+                    <option>Baixa</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Vínculo com Processo, Data Limite e Tempo Estimado */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="font-bold block mb-1">Vincular a Processo</label>
+                  <select
+                    value={selectedTaskModal.process || ''}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, process: e.target.value })}
+                    className="w-full p-2 rounded-lg border bg-white"
+                  >
+                    <option value="">Sem vínculo</option>
+                    {processes.map(p => (
+                      <option key={p.id} value={p.number}>{p.number} - {p.client}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Data Limite / Prazo</label>
+                  <input
+                    type="date"
+                    value={selectedTaskModal.dueDate || ''}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, dueDate: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Tempo Estimado</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 2h 30m"
+                    value={selectedTaskModal.estimatedTime || ''}
+                    onChange={e => setSelectedTaskModal({ ...selectedTaskModal, estimatedTime: e.target.value })}
+                    className="w-full p-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Descrição Completa */}
+              <div>
+                <label className="font-bold block mb-1">Descrição / Instruções da Tarefa</label>
+                <textarea
+                  rows={3}
+                  value={selectedTaskModal.description || ''}
+                  onChange={e => setSelectedTaskModal({ ...selectedTaskModal, description: e.target.value })}
+                  placeholder="Descreva detalhes, etapas ou orientações para o cumprimento..."
+                  className="w-full p-2.5 border rounded-xl"
+                />
+              </div>
+
+              {/* Checklist / Subtarefas */}
+              <div className="p-3.5 border rounded-xl bg-slate-50 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-xs flex items-center gap-1.5" style={{ color: PALETTE.textoPrincipal }}>
+                    <CheckSquare size={14} /> Checklist / Subtarefas
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500">
+                    {(selectedTaskModal.checklist || []).filter((c: any) => c.completed).length} / {(selectedTaskModal.checklist || []).length} concluídas
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  {(selectedTaskModal.checklist || []).map((c: any) => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 p-1.5 bg-white rounded border">
+                      <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={c.completed}
+                          onChange={() => toggleCheckitemTaskModal(c.id)}
+                        />
+                        <span className={`text-xs truncate ${c.completed ? 'line-through text-slate-400' : ''}`}>
+                          {c.text}
+                        </span>
+                      </label>
+                      <button type="button" onClick={() => removeCheckitemTaskModal(c.id)} className="text-amber-700 hover:text-red-700 p-0.5">
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    placeholder="Adicionar item ao checklist..."
+                    value={newCheckitemText}
+                    onChange={e => setNewCheckitemText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCheckitemToTaskModal(); } }}
+                    className="flex-1 p-2 border rounded-lg bg-white"
+                  />
+                  <button type="button" onClick={addCheckitemToTaskModal} className="px-3 py-1.5 rounded-lg border font-bold bg-white hover:bg-slate-100">
+                    + Adicionar
+                  </button>
+                </div>
+              </div>
+
+              {/* Anexos */}
+              <div className="p-3.5 border rounded-xl space-y-2">
+                <span className="font-bold text-xs flex items-center gap-1.5" style={{ color: PALETTE.textoPrincipal }}>
+                  <Paperclip size={14} /> Anexos e Documentos da Tarefa
+                </span>
+                <div className="space-y-1">
+                  {(selectedTaskModal.attachments || []).map((att: any) => (
+                    <div key={att.id} className="flex justify-between items-center p-2 bg-slate-50 border rounded-lg">
+                      <span className="text-xs font-mono truncate">{att.fileName} ({Math.max(1, Math.round(att.size / 1024))} KB)</span>
+                      <a href={att.dataUrl} download={att.fileName} className="text-xs font-bold text-emerald-700 hover:underline">Baixar</a>
+                    </div>
+                  ))}
+                </div>
+                <input
+                  type="file"
+                  onChange={e => handleTaskAttachmentFile(e.target.files?.[0])}
+                  className="w-full text-xs"
+                />
+              </div>
+
+              {/* Comentários & Histórico */}
+              <div className="p-3.5 border rounded-xl space-y-2">
+                <span className="font-bold text-xs flex items-center gap-1.5" style={{ color: PALETTE.textoPrincipal }}>
+                  <MessageSquare size={14} /> Comentários & Histórico de Alterações
+                </span>
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {(selectedTaskModal.comments || []).map((cm: any) => (
+                    <div key={cm.id} className="p-2.5 rounded-lg bg-slate-50 border space-y-1">
+                      <div className="flex justify-between text-[10px] font-bold text-slate-600">
+                        <span>{cm.author}</span>
+                        <span>{cm.date}</span>
+                      </div>
+                      <p className="text-xs">{cm.text}</p>
+                    </div>
+                  ))}
+                  {(selectedTaskModal.comments || []).length === 0 && (
+                    <p className="text-[10px] italic text-slate-400">Nenhum comentário registrado.</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    placeholder="Escrever um comentário..."
+                    value={newCommentText}
+                    onChange={e => setNewCommentText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCommentToTaskModal(); } }}
+                    className="flex-1 p-2 border rounded-lg bg-white"
+                  />
+                  <button type="button" onClick={addCommentToTaskModal} className="px-3 py-1.5 rounded-lg font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                    Comentar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="flex justify-between items-center border-t pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Excluir esta tarefa?')) {
+                    setTasks(prev => prev.filter(t => t.id !== selectedTaskModal.id));
+                    setSelectedTaskModal(null);
+                  }
+                }}
+                className="px-3 py-2 rounded-lg text-amber-800 font-bold flex items-center gap-1 hover:bg-amber-50"
+              >
+                <Trash2 size={14} /> Excluir
+              </button>
+
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setSelectedTaskModal(null)} className="px-4 py-2 rounded-lg border font-bold">
+                  Cancelar
+                </button>
+                <button type="button" onClick={saveSelectedTaskModal} className="px-4 py-2 rounded-lg text-white font-bold shadow" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                  Salvar Alterações
+                </button>
               </div>
             </div>
           </div>
