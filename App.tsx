@@ -320,6 +320,10 @@ export default function App() {
 
   // Modals & Creation States
   const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importList, setImportList] = useState<any[]>([]);
+  const [importError, setImportError] = useState('');
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
   const [isNewDeadlineOpen, setIsNewDeadlineOpen] = useState(false);
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
@@ -1140,6 +1144,75 @@ export default function App() {
     return () => { window.clearTimeout(first); window.clearInterval(interval); };
   }, [sharedOfficeId, session?.user?.id]);
 
+  // --- IMPORTAÇÃO AUTOMÁTICA DE PROCESSOS PELO GMAIL (12 meses) ---
+  // Cruza pelo número do processo: os já cadastrados NUNCA são apagados nem sobrescritos;
+  // nos existentes, só campos vazios são completados.
+  const onlyDigits = (v: any) => String(v || '').replace(/\D/g, '');
+
+  const handleImportProcesses = async () => {
+    setIsImportOpen(true);
+    setIsImporting(true);
+    setImportError('');
+    setImportList([]);
+    try {
+      const { data, error } = await supabase.functions.invoke('gmail-scan', { body: { mode: 'import', months: 12 } });
+      if (error) throw error;
+      const found = Array.isArray(data?.processes) ? data.processes : [];
+      const lista = found.map((f: any) => {
+        const dj = f.datajud || null;
+        const existente = processes.find((p: any) => onlyDigits(p.number) === onlyDigits(f.number));
+        const action = dj ? `${dj.classe || ''}${dj.assunto ? ` - ${dj.assunto}` : ''}`.trim() : '';
+        const court = dj && (dj.tribunal || dj.orgao) ? `${dj.tribunal}${dj.orgao ? ` - ${dj.orgao}` : ''}` : (f.court || '');
+        if (existente) {
+          const patch: any = {};
+          if (!String(existente.action || '').trim() && action) patch.action = action;
+          if (!String(existente.court || '').trim() && court) patch.court = court;
+          const temPatch = Object.keys(patch).length > 0;
+          return { key: f.number, number: f.number, kind: temPatch ? 'completar' : 'existente', existingId: existente.id, patch, action, court, lastDate: f.lastDate, emails: f.emails, selected: temPatch };
+        }
+        return { key: f.number, number: f.number, kind: 'novo', action: action || 'A definir', court, lastDate: f.lastDate, emails: f.emails, selected: true };
+      });
+      setImportList(lista);
+    } catch (err) {
+      console.error('Erro ao importar processos:', err);
+      setImportError('Não foi possível ler o Gmail agora. Verifique se a função gmail-scan foi atualizada no Supabase e tente de novo.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleConfirmImport = () => {
+    const marcados = importList.filter((i) => i.selected);
+    const novos = marcados.filter((i) => i.kind === 'novo');
+    const completar = marcados.filter((i) => i.kind === 'completar');
+    const stamp = Date.now();
+    setProcesses((prev: any[]) => {
+      const conhecidos = new Set(prev.map((p) => onlyDigits(p.number)));
+      const criados = novos
+        .filter((n) => !conhecidos.has(onlyDigits(n.number)))
+        .map((n, idx) => ({
+          id: `imp-${stamp}-${idx}`,
+          number: n.number,
+          client: 'Cliente a vincular',
+          action: n.action,
+          court: n.court,
+          value: 0,
+          honorarios: 0,
+          descontos: 0,
+          status: 'Em andamento',
+          origem: 'gmail'
+        }));
+      const atualizados = prev.map((p) => {
+        const alvo = completar.find((c) => c.existingId === p.id);
+        return alvo ? { ...p, ...alvo.patch } : p;
+      });
+      return [...criados, ...atualizados];
+    });
+    setPersistenceStatus(`Importação concluída: ${novos.length} processo(s) novo(s) e ${completar.length} completado(s). Nenhum cadastro existente foi apagado.`);
+    setIsImportOpen(false);
+    setImportList([]);
+  };
+
   const handleMoveScanToAgenda = (item) => {
     let info: any = extractDeadlineInfo(item, true);
     if (!info) {
@@ -1873,13 +1946,22 @@ export default function App() {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setIsNewProcessOpen(true)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 shadow hover:brightness-110 transition"
-                  style={{ backgroundColor: PALETTE.bordoPrincipal }}
-                >
-                  <Plus size={15} /> Adicionar Processo
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleImportProcesses}
+                    className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border shadow-sm hover:brightness-95 transition"
+                    style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal, backgroundColor: PALETTE.fundoCartoes }}
+                  >
+                    <Search size={15} /> Importar do Gmail
+                  </button>
+                  <button
+                    onClick={() => setIsNewProcessOpen(true)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 shadow hover:brightness-110 transition"
+                    style={{ backgroundColor: PALETTE.bordoPrincipal }}
+                  >
+                    <Plus size={15} /> Adicionar Processo
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4">
@@ -4109,6 +4191,80 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
           )}
         </div>
       </main>
+
+      {/* MODAL: IMPORTAR PROCESSOS DO GMAIL */}
+      {isImportOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl max-h-[90vh] flex flex-col p-6 rounded-2xl bg-white shadow-2xl space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-serif font-bold text-base" style={{ color: PALETTE.bordoEscuro }}>Importar processos do Gmail (últimos 12 meses)</h3>
+              <button onClick={() => setIsImportOpen(false)}><X size={18} /></button>
+            </div>
+
+            {isImporting && (
+              <p className="text-sm py-8 text-center" style={{ color: PALETTE.textoApoio }}>
+                Lendo seus e-mails e consultando o CNJ. Isso pode levar até 1 ou 2 minutos...
+              </p>
+            )}
+
+            {!isImporting && importError && (
+              <p className="text-sm py-6 text-center text-red-700">{importError}</p>
+            )}
+
+            {!isImporting && !importError && importList.length === 0 && (
+              <p className="text-sm py-8 text-center" style={{ color: PALETTE.textoApoio }}>Nenhum número de processo encontrado nos e-mails dos últimos 12 meses.</p>
+            )}
+
+            {!isImporting && importList.length > 0 && (
+              <>
+                <p className="text-xs" style={{ color: PALETTE.textoApoio }}>
+                  {importList.filter((i) => i.kind === 'novo').length} novo(s), {importList.filter((i) => i.kind === 'completar').length} para completar campos vazios e {importList.filter((i) => i.kind === 'existente').length} já cadastrado(s) sem nada a completar. Os cadastros que você já tem não serão apagados nem alterados, exceto campos vazios marcados abaixo.
+                </p>
+                <div className="overflow-y-auto space-y-2 pr-1" style={{ maxHeight: '55vh' }}>
+                  {importList.map((it) => (
+                    <label key={it.key} className="flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer" style={{ borderColor: PALETTE.linhasBordas, opacity: it.kind === 'existente' ? 0.6 : 1 }}>
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={!!it.selected}
+                        disabled={it.kind === 'existente'}
+                        onChange={(e) => setImportList((prev) => prev.map((x) => x.key === it.key ? { ...x, selected: e.target.checked } : x))}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono font-bold">{it.number}</span>
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style={{ backgroundColor: `${PALETTE.dourado}30`, color: PALETTE.bordoEscuro }}>
+                            {it.kind === 'novo' ? 'Novo' : it.kind === 'completar' ? 'Completar campos vazios' : 'Já cadastrado'}
+                          </span>
+                        </div>
+                        <p className="mt-1">{it.action || 'Classe não localizada'}{it.court ? ` | ${it.court}` : ''}</p>
+                        <p style={{ color: PALETTE.textoApoio }}>Último e-mail: {String(it.lastDate || '').split('-').reverse().join('/')} ({it.emails} mensagem(ns))</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center border-t pt-3">
+                  <button
+                    onClick={() => setImportList((prev) => prev.map((x) => x.kind === 'existente' ? x : { ...x, selected: !prev.every((y) => y.kind === 'existente' || y.selected) }))}
+                    className="text-xs underline"
+                    style={{ color: PALETTE.bordoPrincipal }}
+                  >
+                    Marcar ou desmarcar todos
+                  </button>
+                  <button
+                    onClick={handleConfirmImport}
+                    disabled={!importList.some((i) => i.selected)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-40"
+                    style={{ backgroundColor: PALETTE.bordoPrincipal }}
+                  >
+                    Importar selecionados ({importList.filter((i) => i.selected).length})
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* MODAL: NOVO PROCESSO */}
       {isNewProcessOpen && (
