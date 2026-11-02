@@ -345,6 +345,9 @@ export default function App() {
   // Selected Deadline state for click-to-edit modal
   const [selectedDeadlineModal, setSelectedDeadlineModal] = useState(null);
   const [processedScanKeys, setProcessedScanKeys] = useState([]);
+  // Histórico processual e rascunhos de comunicação: nunca enviam mensagens automaticamente.
+  const [processMovements, setProcessMovements] = useState<any[]>([]);
+  const [clientMessageDrafts, setClientMessageDrafts] = useState<any[]>([]);
   const [taskDraft, setTaskDraft] = useState('');
   const [taskFilter, setTaskFilter] = useState('Todas');
   const [tasks, setTasks] = useState([
@@ -584,6 +587,8 @@ export default function App() {
     if (Array.isArray(saved.deadlines)) setDeadlines(saved.deadlines);
     if (Array.isArray(saved.scannedPush)) setScannedPush(saved.scannedPush);
     if (Array.isArray(saved.processedScanKeys)) setProcessedScanKeys(saved.processedScanKeys);
+    if (Array.isArray(saved.processMovements)) setProcessMovements(saved.processMovements);
+    if (Array.isArray(saved.clientMessageDrafts)) setClientMessageDrafts(saved.clientMessageDrafts);
     if (Array.isArray(saved.templates)) {
       setTemplates(saved.templates);
       setSelectedTemplate(saved.templates[0] || null);
@@ -628,6 +633,8 @@ export default function App() {
     deadlines,
     scannedPush,
     processedScanKeys,
+    processMovements,
+    clientMessageDrafts,
     templates,
     tasks,
     leads,
@@ -654,7 +661,7 @@ export default function App() {
       }
     }, 150);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [dataHydrated, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings, session?.user?.id, sharedOfficeId]);
+  }, [dataHydrated, processes, clients, deadlines, scannedPush, processedScanKeys, processMovements, clientMessageDrafts, templates, tasks, leads, financialEntries, documents, officeSettings, session?.user?.id, sharedOfficeId]);
 
   // Depois do login, localiza o escritório ao qual a usuária pertence e carrega a base comum.
   useEffect(() => {
@@ -770,7 +777,7 @@ export default function App() {
       }
     }, 700);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [dataHydrated, session?.user?.id, sharedOfficeId, processes, clients, deadlines, scannedPush, processedScanKeys, templates, tasks, leads, financialEntries, documents, officeSettings]);
+  }, [dataHydrated, session?.user?.id, sharedOfficeId, processes, clients, deadlines, scannedPush, processedScanKeys, processMovements, clientMessageDrafts, templates, tasks, leads, financialEntries, documents, officeSettings]);
 
   // Atualiza a tela quando a outra administradora salvar alterações. A consulta é somente leitura;
   // não substitui mudanças locais que ainda estejam aguardando sincronização.
@@ -989,7 +996,7 @@ export default function App() {
  
 // --- VARREDURA AUTOMÁTICA DO GMAIL: lê intimações, calcula o prazo e lança na agenda ---
   const scanStateRef = useRef<any>({});
-  scanStateRef.current = { processedScanKeys, deadlines, scannedPush, processes };
+  scanStateRef.current = { processedScanKeys, deadlines, scannedPush, processes, processMovements };
   const scanRunningRef = useRef(false);
 
   const parseScanDate = (value: any): Date | null => {
@@ -1002,8 +1009,8 @@ export default function App() {
   };
   const toISODate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-  // Conta dias úteis (art. 219 do CPC) a partir do dia seguinte ao da publicação.
-  // Não desconta feriados nem suspensões de expediente: sempre confira a contagem.
+  // Estimativa preliminar: exclui fins de semana, mas não feriados nem suspensões.
+  // Não representa contagem jurídica definitiva e só é exibida para conferência manual.
   const addDays = (base: Date, n: number, uteis: boolean) => {
     const d = new Date(base);
     let left = n;
@@ -1081,47 +1088,56 @@ export default function App() {
         ...(snap.deadlines || []).map((x: any) => `${x.process}|${x.title}`)
       ]);
 
-      const novasAgenda: any[] = [];
       const paraRevisar: any[] = [];
-      const chavesNovas: string[] = [];
+      const novasMovimentacoes: any[] = [];
+      const novosRascunhos: any[] = [];
 
       intimacoes.forEach((item: any, index: number) => {
         const chave = `${item.process}|${item.title}`;
         if (!item.process || !item.title || jaConhecidas.has(chave)) return;
         jaConhecidas.add(chave);
-
+        const proc = (snap.processes || []).find((p: any) => onlyDigits(p.number) === onlyDigits(item.process));
+        const cliente = (clients || []).find((c: any) => c.name === (proc?.client || item.client));
         const info = extractDeadlineInfo(item);
-        if (info) {
-          const proc = (snap.processes || []).find((p: any) => p.number === item.process);
-          novasAgenda.push({
-            id: `scan-${Date.now()}-${index}`,
-            title: item.title,
-            client: proc?.client || item.client || 'Cliente relacionado ao processo',
+        const registroId = item.id || `gmail-${Date.now()}-${index}`;
+        paraRevisar.push({
+          id: registroId,
+          ...item,
+          candidateDeadline: info ? { ...info, status: 'Aguardando conferência' } : null,
+          reviewStatus: 'Pendente de análise'
+        });
+        novasMovimentacoes.push({
+          id: `mov-${registroId}`,
+          process: item.process,
+          client: proc?.client || item.client || 'Cliente não vinculado',
+          title: item.title,
+          description: item.snippet || item.title,
+          date: item.date || new Date().toISOString(),
+          court: item.court || proc?.court || '',
+          source: 'Gmail',
+          sourceId: registroId
+        });
+        if (cliente?.phone) {
+          novosRascunhos.push({
+            id: `draft-${registroId}`,
             process: item.process,
-            court: item.court || proc?.court || '',
-            dueDate: info.dueDate,
-            dueTime: info.dueTime,
-            type: info.type,
-            status: 'Pendente',
-            completed: false,
-            origem: 'gmail'
+            client: cliente.name,
+            phone: cliente.phone,
+            movementTitle: item.title,
+            message: `Olá, ${cliente.name}! Passando para informar que houve uma nova movimentação no processo nº ${item.process}: ${item.title}. Estamos acompanhando o andamento e, se houver alguma providência ou informação relevante, entraremos em contato.`,
+            status: 'Aguardando sua revisão',
+            createdAt: new Date().toISOString()
           });
-          chavesNovas.push(chave);
-        } else {
-          // Sem prazo identificável no texto: fica na Varredura para você definir a data.
-          paraRevisar.push({ id: item.id || `push-${Date.now()}-${index}`, ...item });
         }
       });
 
-      if (novasAgenda.length) {
-        setDeadlines(prev => [...novasAgenda, ...prev]);
-        setProcessedScanKeys(prev => [...new Set([...prev, ...chavesNovas])]);
-      }
       if (paraRevisar.length) setScannedPush(prev => [...paraRevisar, ...prev]);
+      if (novasMovimentacoes.length) setProcessMovements(prev => [...novasMovimentacoes.filter(n => !prev.some((x: any) => x.sourceId === n.sourceId)), ...prev]);
+      if (novosRascunhos.length) setClientMessageDrafts(prev => [...novosRascunhos.filter(n => !prev.some((x: any) => x.id === n.id)), ...prev]);
 
       setPersistenceStatus(
-        novasAgenda.length || paraRevisar.length
-          ? `Gmail: ${novasAgenda.length} prazo(s) lançado(s) na agenda; ${paraRevisar.length} para conferir na Varredura.`
+        paraRevisar.length
+          ? `Gmail: ${paraRevisar.length} publicação(ões) para análise; movimentações registradas no histórico. Nenhum prazo foi confirmado automaticamente.`
           : 'Gmail verificado: nenhuma nova intimação ou publicação.'
       );
     } catch (error) {
@@ -1221,7 +1237,12 @@ export default function App() {
       if (!d) { if (resposta) window.alert('Data inválida. Use o formato dd/mm/aaaa.'); return; }
       info = { dueDate: toISODate(d), dueTime: '23:59', type: 'FATAL' };
     }
-    const proc = processes.find((p) => p.number === item.process);
+    const dataCandidata = info.dueDate.split('-').reverse().join('/');
+    const confirmacao = window.confirm(`O sistema identificou ${dataCandidata} como data candidata. A contagem ainda NÃO considera feriados, suspensões, termo inicial ou regras específicas do procedimento.
+
+Você conferiu a publicação e confirma que deseja cadastrar essa data na Agenda?`);
+    if (!confirmacao) return;
+    const proc = processes.find((p) => onlyDigits(p.number) === onlyDigits(item.process));
     const agendaItem = {
       id: Date.now().toString(),
       title: item.title,
@@ -1232,7 +1253,10 @@ export default function App() {
       dueTime: info.dueTime,
       type: info.type,
       status: 'Pendente',
-      completed: false
+      completed: false,
+      origem: 'gmail',
+      revisadoManualmente: true,
+      dataCandidataOriginal: info.dueDate
     };
     setDeadlines(prev => [...prev, agendaItem]);
     setProcessedScanKeys(prev => [...new Set([...prev, `${item.process}|${item.title}`])]);
@@ -1880,7 +1904,7 @@ export default function App() {
                     Varredura Eletrônica & Notificações Push
                   </h3>
                   <p className="text-xs" style={{ color: PALETTE.textoApoio }}>
-                    Seu Gmail é verificado automaticamente a cada 30 minutos; prazos identificados entram direto na Agenda.
+                    Seu Gmail é verificado automaticamente a cada 30 minutos. Publicações ficam para sua análise; nenhum prazo é confirmado ou lançado automaticamente.
                   </p>
                 </div>
 
@@ -1911,6 +1935,7 @@ export default function App() {
                     <p className="text-xs p-2.5 rounded border italic" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>
                       "{item.snippet}"
                     </p>
+                    {item.candidateDeadline && <div className="text-xs p-2.5 rounded-lg border" style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', color: '#9A3412' }}><strong>Possível prazo identificado:</strong> {item.candidateDeadline.dueDate.split('-').reverse().join('/')} · {item.candidateDeadline.type === 'FATAL' ? 'Prazo' : 'Compromisso'}. <strong>Ainda não confirmado.</strong> Confira o teor da publicação, termo inicial, regra de contagem e calendário do tribunal antes de incluir na agenda.</div>}
 
                     <div className="flex justify-end pt-1">
                       <button
@@ -1918,7 +1943,7 @@ export default function App() {
                         className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow hover:brightness-110 transition"
                         style={{ backgroundColor: PALETTE.bordoPrincipal }}
                       >
-                        <CalendarIcon size={14} /> Adicionar à Agenda e Remover da Varredura
+                        <CalendarIcon size={14} /> Conferir e adicionar à Agenda
                       </button>
                     </div>
                   </div>
@@ -1992,6 +2017,16 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              <section className="rounded-xl border p-4 space-y-3" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
+                <div><h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Histórico de movimentações</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>Publicações recebidas pelo Gmail são registradas aqui, vinculadas ao número do processo.</p></div>
+                {processMovements.length === 0 ? <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Nenhuma movimentação importada ainda.</p> : processMovements.slice(0, 30).map((mov: any) => <div key={mov.id} className="p-3 rounded-lg border bg-white space-y-1" style={{ borderColor: PALETTE.linhasBordas }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.title}</strong><span className="text-[10px]" style={{ color: PALETTE.textoApoio }}>{String(mov.date || '').slice(0, 10)}</span></div><p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>{mov.client} · {mov.process} · Fonte: {mov.source}</p><p className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.description}</p></div>)}
+              </section>
+
+              <section className="rounded-xl border p-4 space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                <div><h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Mensagens preparadas para sua revisão</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>O sistema apenas prepara o texto. Nada é enviado. Você revisa, altera e decide se deseja abrir o WhatsApp.</p></div>
+                {clientMessageDrafts.length === 0 ? <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Nenhuma mensagem preparada.</p> : clientMessageDrafts.slice(0, 20).map((draft: any) => <div key={draft.id} className="p-3 rounded-lg border space-y-2" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{draft.client} · {draft.process}</strong><span className="text-[10px] font-semibold" style={{ color: PALETTE.dourado }}>{draft.status}</span></div><p className="text-xs whitespace-pre-wrap" style={{ color: PALETTE.textoApoio }}>{draft.message}</p><div className="flex flex-wrap gap-2"><button onClick={() => { const revised = window.prompt('Revise ou edite a mensagem. Nada será enviado automaticamente:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Revisada por você' } : x)); }} className="px-3 py-1.5 rounded-lg border text-xs font-bold" style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>Revisar mensagem</button><button onClick={() => { const revised = window.prompt('Confira o texto final. Para abrir o WhatsApp, confirme o texto abaixo:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Aprovada para envio manual' } : x)); const phone = String(draft.phone || '').replace(/\D/g, ''); if (phone) window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#166534' }}>Abrir WhatsApp após revisar</button></div></div>)}
+              </section>
             </div>
           )}
 
@@ -2038,14 +2073,13 @@ export default function App() {
                     <div className="pt-2 border-t flex justify-between items-center text-xs" style={{ borderColor: PALETTE.linhasBordas }}>
                       <span style={{ color: PALETTE.textoApoio }}>{cli.email}</span>
                       
-                      <a
-                        href={`https://wa.me/55${cli.phone.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-1.5 rounded-lg font-bold text-white flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 transition shadow-sm"
+                      <button
+                        type="button"
+                        onClick={() => { const initial = `Olá, ${cli.name}! Tudo bem? Estou entrando em contato para tratar do seu atendimento.`; const revised = window.prompt('Prepare e revise a mensagem. O sistema não enviará nada:', initial); if (revised === null) return; if (!revised.trim()) return; const phone = String(cli.phone || '').replace(/\D/g, ''); if (!phone) { window.alert('Cadastre um telefone válido para este cliente.'); return; } window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }}
+                        className="px-3 py-1.5 rounded-lg font-bold text-white flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 transition shadow-sm"
                       >
-                        <MessageCircle size={14} /> WhatsApp
-                      </a>
+                        <MessageCircle size={14} /> Preparar mensagem
+                      </button>
                     </div>
                   </div>
                 ))}
