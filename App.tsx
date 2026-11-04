@@ -1,3 +1,4 @@
+// REVISAO 02 — CRM com ficha ampliada de atendimento e triagem
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import {
