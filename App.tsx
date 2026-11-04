@@ -51,6 +51,65 @@ const MENU_PALETTE = {
   linha: '#6B3141'       // --menu-linha
 };
 
+// ===== FUNIL DO ESCRITÓRIO (9 etapas) =====
+const FUNNEL_STAGES = ['Novo contato','Triagem','Aguardando documentos','Consulta agendada','Proposta enviada','Contratado','Em andamento','Concluído','Perdido'];
+const CONVERTED_STAGES = ['Contratado','Em andamento','Concluído'];
+const STAGE_MAX_DAYS: Record<string, number> = { 'Novo contato': 1, 'Triagem': 1, 'Aguardando documentos': 10, 'Consulta agendada': 7, 'Proposta enviada': 5, 'Contratado': 5, 'Em andamento': 15 };
+const CASE_TYPES = ['Divórcio','União estável','Guarda','Convivência','Alimentos','Inventário','Outro'];
+const URGENCY_LEVELS = ['Verde','Amarela','Vermelha'];
+const LOST_REASONS = ['Preço','Escolheu outro escritório','Desistiu','Sem documentos','Sem retorno','Fora do nicho'];
+const DOCS_GUARDA = ['Documentos pessoais e comprovante de residência','Certidão de nascimento da criança','Descrição da rotina atual (escola, saúde, moradia)','Comprovantes de despesas da criança','Provas organizadas (mensagens, registros)','Decisão ou acordo anterior, com número do processo'];
+const DOCS_DIVORCIO = ['Documentos pessoais das partes e comprovante de residência','Certidão de casamento atualizada (ou prova da união estável)','Certidão de nascimento dos filhos','Pacto antenupcial, se houver','Relação de bens com comprovantes e dívidas','Comprovantes de renda','Acordo já conversado, se existir'];
+const DOCS_BY_CASE: Record<string, string[]> = {
+  'Divórcio': DOCS_DIVORCIO,
+  'União estável': DOCS_DIVORCIO,
+  'Guarda': DOCS_GUARDA,
+  'Convivência': DOCS_GUARDA,
+  'Alimentos': ['Certidão de nascimento','Despesas de quem recebe (escola, saúde, moradia, alimentação)','Comprovantes de renda de quem paga, se houver','Dados do devedor (endereço e local de trabalho)','Histórico de pagamentos e atrasos','Decisão ou acordo anterior, com número do processo'],
+  'Inventário': ['Certidão de óbito','Certidões de casamento e nascimento do falecido','Documentos pessoais de todos os herdeiros','Bens (matrículas, veículos, contas) e dívidas','Testamento, se houver, e certidão de existência de testamento','Última declaração de IR do falecido'],
+  'Outro': []
+};
+const OPENING_CHECKLIST = ['Contrato de honorários assinado','Procuração assinada','Declaração de hipossuficiência (se houver pedido de gratuidade)','Termo de consentimento LGPD assinado','Pasta digital criada (AAAA-NNN Sobrenome, Tipo)','Documentos conferidos e arquivados','Cadastrar o processo e o número no sistema','Elaborar e protocolar a petição inicial','Cadastrar primeiro prazo e alertas','Enviar boas-vindas à cliente','Orientar sobre segredo de justiça','Agendar atualização quinzenal'];
+
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function addMonthsISO(iso: string, months: number) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const last = new Date(y, m - 1 + months + 1, 0).getDate();
+  const r = new Date(y, m - 1 + months, Math.min(d, last));
+  return `${r.getFullYear()}-${String(r.getMonth() + 1).padStart(2, '0')}-${String(r.getDate()).padStart(2, '0')}`;
+}
+function addDaysISO(iso: string, days: number) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const r = new Date(y, m - 1, d + days);
+  return `${r.getFullYear()}-${String(r.getMonth() + 1).padStart(2, '0')}-${String(r.getDate()).padStart(2, '0')}`;
+}
+function daysSinceISO(value: string) {
+  const t = new Date(value).getTime();
+  if (Number.isNaN(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+function normalizeLead(l: any) {
+  const stage = l.stage === 'Negociação' ? 'Proposta enviada' : (FUNNEL_STAGES.includes(l.stage) ? l.stage : 'Novo contato');
+  return { urgency: 'Verde', caseType: 'Outro', otherParty: '', nextActionDate: '', lostReason: '', docs: {}, ...l, stage, stageSince: l.stageSince || l.createdAt || new Date().toISOString() };
+}
+const firstName = (n: string) => String(n || '').trim().split(/\s+/)[0] || '';
+const LEAD_MESSAGES: Record<string, { label: string; fn: (l: any) => string }> = {
+  oi: { label: 'Primeira resposta', fn: l => `Olá, ${firstName(l.name)}! Obrigada por nos procurar. Sei que não é um assunto fácil. Para entender a sua situação e encaminhar do jeito certo, posso te fazer algumas perguntas rápidas?` },
+  triagem: { label: 'Cinco perguntas da triagem', fn: l => `${firstName(l.name)}, para eu levar o seu caso à Dra. Valeska já organizado, me conta rapidinho:\n1) Em uma frase, o que você precisa resolver?\n2) Já existe processo em andamento? Se sim, você tem o número?\n3) Há filhos menores ou bens envolvidos?\n4) Existe algum prazo, audiência ou situação de risco acontecendo agora?\n5) Em qual cidade você está e qual o melhor horário para conversarmos?` },
+  docs: { label: 'Lista de documentos', fn: l => `${firstName(l.name)}, para a análise da Dra. Valeska precisamos destes documentos: ${(DOCS_BY_CASE[l.caseType] || []).join('; ') || '[lista]'}. Pode mandar foto por aqui mesmo, desde que fique bem legível. Se tiver dificuldade em achar algum, é só me avisar que eu te ajudo.` },
+  docsLembrete: { label: 'Lembrete de documentos', fn: l => { const falta = (DOCS_BY_CASE[l.caseType] || []).filter(x => !l.docs?.[x]); return `Oi, ${firstName(l.name)}! Já recebemos parte dos documentos. Falta só: ${falta.join('; ') || '[o que falta]'}. Precisa de ajuda para encontrar?`; } },
+  consulta: { label: 'Confirmação de consulta', fn: l => `Olá, ${firstName(l.name)}! Passando para confirmar a sua consulta com a Dra. Valeska em [dia] às [hora], [local ou link]. Se precisar remarcar, é só avisar por aqui. Até lá!` },
+  proposta: { label: 'Envio da proposta', fn: l => `${firstName(l.name)}, conforme conversamos, segue a proposta da Dra. Valeska para o seu caso, com o que está incluído, os valores e as formas de pagamento. Leia com calma e me diga se ficou alguma dúvida. Quando você decidir, é só avisar por aqui que enviamos o contrato para assinatura digital.` },
+  followup: { label: 'Follow-up da proposta', fn: l => `Olá, ${firstName(l.name)}! Passando para saber se ficou alguma dúvida sobre a proposta. Sem pressa: quando você decidir, é só avisar. Seguimos à disposição.` },
+  boasvindas: { label: 'Boas-vindas (contratou)', fn: l => `Seja bem-vinda, ${firstName(l.name)}! A partir de agora o seu caso está com a Dra. Valeska. Os próximos passos são: [passos]. Você será avisada a cada novidade e, mesmo sem novidade, a cada 15 dias enviaremos uma atualização. Pedimos apenas que não comente o caso nas redes sociais, pois o processo corre em segredo de justiça.` },
+  quinzenal: { label: 'Atualização quinzenal', fn: l => `Oi, ${firstName(l.name)}! Passando para avisar que o seu caso está na fase de [fase]. [Novidade ou "sem novidade nesta quinzena, seguimos aguardando X"]. Assim que houver qualquer movimento, avisamos por aqui.` },
+  parcela: { label: 'Lembrete de parcela', fn: l => `Olá, ${firstName(l.name)}! Passando para lembrar que a parcela de honorários vence em [data]. A chave Pix é [chave]. Se houver qualquer dificuldade, conte conosco para conversar.` },
+  encerramento: { label: 'Encerramento do caso', fn: l => `${firstName(l.name)}, o seu caso foi concluído. Em resumo, [resultado em linguagem simples]. Os cuidados finais são: [cuidados]. Foi uma honra acompanhar você neste momento. O escritório continua à disposição sempre que precisar.` }
+};
+
 const LIGHT_PALETTE = {
   // Paleta clara neutra; o bordô fica concentrado na identidade do escritório.
   bordoPrincipal: '#7E0A25',
@@ -208,6 +267,7 @@ export default function App() {
     }
   });
   const PALETTE = isDarkMode ? DARK_PALETTE : LIGHT_PALETTE;
+  const fieldStyle = { backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas };
 
   useEffect(() => {
     try {
@@ -307,8 +367,8 @@ export default function App() {
   const [workspaceSubTab, setWorkspaceSubTab] = useState('modelos');
 
   // Módulos novos: captação, financeiro, documentos, relatórios e configurações.
-  const [leads, setLeads] = useState<any[]>(() => readLocalValue('vm-leads', []));
-  const [leadDraft, setLeadDraft] = useState({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '' });
+  const [leads, setLeads] = useState<any[]>(() => (readLocalValue('vm-leads', []) as any[]).map(normalizeLead));
+  const [leadDraft, setLeadDraft] = useState({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '', urgency: 'Verde', caseType: 'Divórcio', otherParty: '', nextActionDate: '', lostReason: '' });
   const [financialEntries, setFinancialEntries] = useState<any[]>(() => readLocalValue('vm-financial-entries', []));
   const [financialDraft, setFinancialDraft] = useState({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
   const [documents, setDocuments] = useState<any[]>(() => readLocalValue('vm-documents', []));
@@ -316,10 +376,25 @@ export default function App() {
   const [officeSettings, setOfficeSettings] = useState<any>(() => readLocalValue('vm-office-settings', { officeName: 'Valeska Monteiro Advocacia', oab: 'OAB/ES 41.715', email: 'contato@valeskamonteiro.adv.br', phone: '(27) 99752-5314', address: 'Serra / ES', lgpdConsent: false, lgpdAcceptedAt: '' }));
   const [moduleNotice, setModuleNotice] = useState('');
 
+  // Parcelas e despesas pendentes vencidas passam sozinhas para "Atrasado".
+  useEffect(() => {
+    const t = todayISO();
+    if (financialEntries.some((e: any) => e.status === 'Pendente' && e.dueDate && e.dueDate < t)) {
+      setFinancialEntries(prev => prev.map((e: any) => (e.status === 'Pendente' && e.dueDate && e.dueDate < t) ? { ...e, status: 'Atrasado' } : e));
+    }
+  }, [financialEntries]);
+
+  // Contatos: urgentes primeiro; encerrados por último.
+  const sortedLeads = [...leads].sort((a: any, b: any) => {
+    const closed = (x: any) => (x.stage === 'Perdido' || x.stage === 'Concluído') ? 1 : 0;
+    const urg = (x: any) => ({ Vermelha: 0, Amarela: 1, Verde: 2 } as any)[x.urgency] ?? 2;
+    return closed(a) - closed(b) || urg(a) - urg(b) || new Date(a.stageSince || a.createdAt).getTime() - new Date(b.stageSince || b.createdAt).getTime();
+  });
+
   // Os registros são persistidos em conjunto na camada de persistência abaixo.
   
   // Dynamic Month State (Default: October 2026)
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 9, 1));
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState('grid'); // 'grid' | 'list'
 
   // Modals & Creation States
@@ -438,7 +513,7 @@ export default function App() {
     title: '',
     client: '',
     process: '',
-    dueDate: '2026-10-28',
+    dueDate: todayISO(),
     dueTime: '17:00',
     type: 'FATAL'
   });
@@ -651,7 +726,7 @@ export default function App() {
       setSelectedTemplate(saved.templates[0] || null);
     }
     if (Array.isArray(saved.tasks)) setTasks(saved.tasks);
-    if (Array.isArray(saved.leads)) setLeads(saved.leads);
+    if (Array.isArray(saved.leads)) setLeads(saved.leads.map(normalizeLead));
     if (Array.isArray(saved.financialEntries)) setFinancialEntries(saved.financialEntries);
     if (Array.isArray(saved.documents)) setDocuments(saved.documents);
     if (saved.officeSettings && typeof saved.officeSettings === 'object') setOfficeSettings(saved.officeSettings);
@@ -916,7 +991,7 @@ export default function App() {
     if (!newDeadline.title) return;
     const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
     setDeadlines(prev => [item, ...prev]);
-    setNewDeadline({ title: '', client: '', process: '', dueDate: '2026-10-28', dueTime: '17:00', type: 'FATAL' });
+    setNewDeadline({ title: '', client: '', process: '', dueDate: todayISO(), dueTime: '17:00', type: 'FATAL' });
     setIsNewDeadlineOpen(false);
   };
 
@@ -1079,10 +1154,88 @@ export default function App() {
   const handleAddLead = (e) => {
     e.preventDefault();
     if (!leadDraft.name.trim()) { window.alert('Informe o nome do potencial cliente.'); return; }
-    const item = { ...leadDraft, id: `lead-${Date.now()}`, estimatedValue: Number(leadDraft.estimatedValue || 0), createdAt: new Date().toISOString() };
+    const norm = (v: any) => String(v || '').trim().toLowerCase();
+    const op = norm(leadDraft.otherParty);
+    const known = [...leads.map((l: any) => l.name), ...clients.map((c: any) => c.name)];
+    if (op && known.some(n => norm(n) === op) && !window.confirm('Atenção: a outra parte já consta como contato ou cliente do escritório (possível conflito de interesses). Continuar o cadastro?')) return;
+    if (leads.some((l: any) => norm(l.otherParty) && norm(l.otherParty) === norm(leadDraft.name)) && !window.confirm('Atenção: este nome já aparece como outra parte em outro contato (possível conflito de interesses). Continuar o cadastro?')) return;
+    const nowIso = new Date().toISOString();
+    const item = { ...leadDraft, id: `lead-${Date.now()}`, estimatedValue: Number(leadDraft.estimatedValue || 0), createdAt: nowIso, stageSince: nowIso, docs: {} };
     setLeads(prev => [item, ...prev]);
-    setLeadDraft({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '' });
+    setLeadDraft({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '', urgency: 'Verde', caseType: 'Divórcio', otherParty: '', nextActionDate: '', lostReason: '' });
     setModuleNotice('Lead cadastrado no funil.');
+  };
+
+  const changeLeadStage = (id: string, stage: string) => {
+    let reason = '';
+    if (stage === 'Perdido') {
+      const r = window.prompt('Motivo da perda (obrigatório):\n' + LOST_REASONS.join(' | '), 'Sem retorno');
+      if (r === null || !r.trim()) return;
+      reason = r.trim();
+    }
+    setLeads(prev => prev.map((x: any) => x.id === id ? { ...x, stage, stageSince: new Date().toISOString(), lostReason: reason || x.lostReason || '' } : x));
+  };
+
+  const toggleLeadDoc = (id: string, item: string) => {
+    setLeads(prev => prev.map((x: any) => x.id === id ? { ...x, docs: { ...(x.docs || {}), [item]: !x.docs?.[item] } } : x));
+  };
+
+  const sendLeadMessage = (lead: any, key: string) => {
+    const m = LEAD_MESSAGES[key];
+    if (!m) return;
+    const revised = window.prompt('Revise a mensagem antes de abrir o WhatsApp. O sistema não envia nada sozinho:', m.fn(lead));
+    if (revised === null || !revised.trim()) return;
+    const digits = String(lead.phone || '').replace(/\D/g, '');
+    if (!digits) { window.alert('Cadastre um telefone para este contato.'); return; }
+    const full = digits.length > 11 ? digits : `55${digits}`;
+    window.open(`https://wa.me/${full}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const generateInstallments = (clientName: string, total: number, entrada: number, parcelas: number, firstDue: string) => {
+    const cents = Math.round(total * 100);
+    const entCents = Math.min(cents, Math.round(entrada * 100));
+    const resto = cents - entCents;
+    const n = Math.max(1, parcelas);
+    const base = Math.floor(resto / n);
+    const stamp = Date.now();
+    const novos: any[] = [];
+    let idx = 0;
+    if (entCents > 0) novos.push({ id: `fin-${stamp}-${idx++}`, title: `Honorários, entrada${clientName ? ' · ' + clientName : ''}`, kind: 'Receita', category: 'Honorários', client: clientName, amount: entCents / 100, dueDate: firstDue, status: 'Pendente', createdAt: new Date().toISOString() });
+    for (let i = 0; i < n && resto > 0; i++) {
+      const valor = i === n - 1 ? resto - base * (n - 1) : base;
+      novos.push({ id: `fin-${stamp}-${idx++}`, title: `Honorários, parcela ${i + 1}/${n}${clientName ? ' · ' + clientName : ''}`, kind: 'Receita', category: 'Honorários', client: clientName, amount: valor / 100, dueDate: addMonthsISO(firstDue, entCents > 0 ? i + 1 : i), status: 'Pendente', createdAt: new Date().toISOString() });
+    }
+    if (novos.length) setFinancialEntries(prev => [...novos, ...prev]);
+    return novos.length;
+  };
+
+  const promptInstallments = (presetClient = '') => {
+    const cli = window.prompt('Nome do cliente:', presetClient);
+    if (cli === null) return;
+    const total = Number((window.prompt('Valor total dos honorários (R$):', '') || '').replace(',', '.'));
+    if (!(total > 0)) { window.alert('Informe um valor total maior que zero.'); return; }
+    const entrada = Number((window.prompt('Valor da entrada (R$). Use 0 se não houver:', '0') || '0').replace(',', '.')) || 0;
+    const parcelas = parseInt(window.prompt('Número de parcelas (depois da entrada):', '3') || '1', 10) || 1;
+    const first = window.prompt('Data do primeiro vencimento (AAAA-MM-DD):', todayISO()) || todayISO();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(first)) { window.alert('Data inválida. Use o formato AAAA-MM-DD.'); return; }
+    const q = generateInstallments(cli.trim(), total, entrada, parcelas, first);
+    setModuleNotice(`${q} lançamento(s) de honorários gerado(s).`);
+  };
+
+  const convertLeadToCase = (lead: any) => {
+    if (!window.confirm(`Converter ${lead.name} em cliente contratado? Serão criados o cliente, as parcelas de honorários e a tarefa de abertura do caso.`)) return;
+    if (!clients.some((c: any) => String(c.name).trim().toLowerCase() === String(lead.name).trim().toLowerCase())) {
+      setClients(prev => [{ id: `cli-${Date.now()}`, name: lead.name, type: 'Pessoa Física', document: '', phone: lead.phone || '', email: lead.email || '', status: 'Ativo' }, ...prev]);
+    }
+    promptInstallments(lead.name);
+    const stamp = Date.now();
+    setTasks(prev => [{
+      id: `t-${stamp}`, title: `Abrir caso: ${lead.name} (${lead.caseType || 'Família'})`, description: 'Checklist de abertura do caso. Cadastre o processo na aba Processos depois do protocolo.',
+      status: 'A fazer', priority: 'Alta', dueDate: addDaysISO(todayISO(), 5), createdBy: 'Dra. Valeska', assignee: 'Dra. Valeska', process: '', estimatedTime: '',
+      checklist: OPENING_CHECKLIST.map((text, i) => ({ id: `c-${stamp}-${i}`, text, completed: false })), attachments: [], comments: []
+    }, ...prev]);
+    setLeads(prev => prev.map((x: any) => x.id === lead.id ? { ...x, stage: 'Contratado', stageSince: new Date().toISOString() } : x));
+    setModuleNotice('Cliente criado e tarefa de abertura gerada. Cadastre o processo quando houver número.');
   };
 
   const handleAddFinancialEntry = (e) => {
@@ -2503,20 +2656,42 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   <input type="email" placeholder="E-mail" aria-label="E-mail do lead" value={leadDraft.email} onChange={e => setLeadDraft(p => ({ ...p, email: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
                   <select aria-label="Área jurídica" value={leadDraft.area} onChange={e => setLeadDraft(p => ({ ...p, area: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option>Família</option><option>Trabalhista</option><option>Cível</option><option>Previdenciário</option><option>Consumidor</option><option>Outra área</option></select>
                   <select aria-label="Origem do contato" value={leadDraft.source} onChange={e => setLeadDraft(p => ({ ...p, source: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option>Indicação</option><option>WhatsApp</option><option>Instagram</option><option>Site</option><option>Google</option><option>Outro</option></select>
-                  <select aria-label="Etapa do funil" value={leadDraft.stage} onChange={e => setLeadDraft(p => ({ ...p, stage: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <option key={stage}>{stage}</option>)}</select>
+                  <select aria-label="Etapa do funil" value={leadDraft.stage} onChange={e => setLeadDraft(p => ({ ...p, stage: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{FUNNEL_STAGES.map(stage => <option key={stage}>{stage}</option>)}</select>
                   <input type="number" min="0" step="0.01" placeholder="Valor estimado (R$)" aria-label="Valor estimado" value={leadDraft.estimatedValue} onChange={e => setLeadDraft(p => ({ ...p, estimatedValue: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
                   <input placeholder="Próxima ação (ex.: retornar amanhã)" aria-label="Próxima ação" value={leadDraft.nextAction} onChange={e => setLeadDraft(p => ({ ...p, nextAction: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
+                  <select aria-label="Tipo de caso" value={leadDraft.caseType} onChange={e => setLeadDraft(p => ({ ...p, caseType: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={fieldStyle}>{CASE_TYPES.map(t => <option key={t}>{t}</option>)}</select>
+                  <select aria-label="Urgência" value={leadDraft.urgency} onChange={e => setLeadDraft(p => ({ ...p, urgency: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={fieldStyle}>{URGENCY_LEVELS.map(t => <option key={t} value={t}>Urgência {t.toLowerCase()}</option>)}</select>
+                  <input placeholder="Nome da outra parte (conflito de interesses)" aria-label="Outra parte" value={leadDraft.otherParty} onChange={e => setLeadDraft(p => ({ ...p, otherParty: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={fieldStyle} />
+                  <input type="date" aria-label="Data da próxima ação" value={leadDraft.nextActionDate} onChange={e => setLeadDraft(p => ({ ...p, nextActionDate: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={fieldStyle} />
                   <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Cadastrar lead</button></div>
                 </form>
               </section>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                {['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <div key={stage} className="p-3 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] font-bold" style={{ color: PALETTE.textoApoio }}>{stage}</p><p className="text-2xl font-serif mt-1" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(lead => lead.stage === stage).length}</p></div>)}
+              {(() => { const stuck = leads.filter((l: any) => STAGE_MAX_DAYS[l.stage] && daysSinceISO(l.stageSince || l.createdAt) > STAGE_MAX_DAYS[l.stage]); return stuck.length ? <div className="p-3 rounded-xl border text-xs font-semibold" style={{ borderColor: '#B91C1C', color: '#B91C1C', backgroundColor: PALETTE.fundoCartoes }}>{stuck.length} contato(s) parado(s) além do prazo da etapa: {stuck.slice(0, 5).map((l: any) => l.name).join(', ')}</div> : null; })()}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                {FUNNEL_STAGES.map(stage => <div key={stage} className="p-3 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] font-bold" style={{ color: PALETTE.textoApoio }}>{stage}</p><p className="text-2xl font-serif mt-1" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(lead => lead.stage === stage).length}</p></div>)}
               </div>
               <section className="space-y-3">
-                {leads.map(lead => <article key={lead.id} className="p-4 rounded-xl border flex flex-col lg:flex-row lg:items-center justify-between gap-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                  <div className="min-w-0"><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{lead.name}</h4><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{lead.area} · {lead.source} {lead.phone ? `· ${lead.phone}` : ''} {lead.email ? `· ${lead.email}` : ''}</p>{lead.nextAction && <p className="text-[11px] mt-1" style={{ color: PALETTE.textoApoio }}>Próxima ação: {lead.nextAction}</p>}</div>
-                  <div className="flex flex-wrap items-center gap-2">{Number(lead.estimatedValue) > 0 && <span className="text-xs font-bold" style={{ color: PALETTE.valoresReceber }}>R$ {Number(lead.estimatedValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}<select aria-label={`Etapa de ${lead.name}`} value={lead.stage} onChange={e => setLeads(prev => prev.map(x => x.id === lead.id ? { ...x, stage: e.target.value } : x))} className="p-2 border rounded-lg text-[10px]" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}>{['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <option key={stage}>{stage}</option>)}</select><button title="Excluir lead" onClick={() => { if (window.confirm('Excluir este lead?')) setLeads(prev => prev.filter(x => x.id !== lead.id)); }} className="p-2 rounded-lg" style={{ color: PALETTE.descontos }}><Trash2 size={14}/></button></div>
-                </article>)}
+                {sortedLeads.map((lead: any) => { const dias = daysSinceISO(lead.stageSince || lead.createdAt); const max = STAGE_MAX_DAYS[lead.stage]; const atrasado = Boolean(max) && dias > max; const atencao = Boolean(max) && !atrasado && dias >= Math.ceil(max * 0.7); const docsLista = DOCS_BY_CASE[lead.caseType] || []; const feitos = docsLista.filter(x => lead.docs?.[x]).length; const corUrg = lead.urgency === 'Vermelha' ? '#B91C1C' : lead.urgency === 'Amarela' ? '#B45309' : '#047857'; const vencida = lead.nextActionDate && lead.nextActionDate < todayISO(); return (
+                <article key={lead.id} className="p-4 rounded-xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: atrasado ? '#B91C1C' : PALETTE.linhasBordas }}>
+                  <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{lead.name} <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full border" style={{ color: corUrg, borderColor: corUrg }}>Urgência {String(lead.urgency || 'Verde').toLowerCase()}</span></h4>
+                      <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{lead.caseType || lead.area} · {lead.source} {lead.phone ? `· ${lead.phone}` : ''} {lead.email ? `· ${lead.email}` : ''}</p>
+                      {lead.otherParty && <p className="text-[11px] mt-1" style={{ color: PALETTE.textoApoio }}>Outra parte: {lead.otherParty}</p>}
+                      {(lead.nextAction || lead.nextActionDate) && <p className="text-[11px] mt-1 font-semibold" style={{ color: vencida ? '#B91C1C' : PALETTE.textoApoio }}>Próxima ação: {lead.nextAction || 'definir'} {lead.nextActionDate ? `· ${new Date(lead.nextActionDate + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}{vencida ? ' (vencida)' : ''}</p>}
+                      {lead.stage === 'Perdido' && lead.lostReason && <p className="text-[11px] mt-1" style={{ color: PALETTE.textoApoio }}>Motivo da perda: {lead.lostReason}</p>}
+                      {max ? <p className="text-[11px] mt-1 font-bold" style={{ color: atrasado ? '#B91C1C' : atencao ? '#B45309' : '#047857' }}>{dias} dia(s) em "{lead.stage}" (máximo {max}){atrasado ? ': AGIR HOJE' : ''}</p> : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {Number(lead.estimatedValue) > 0 && <span className="text-xs font-bold" style={{ color: PALETTE.valoresReceber }}>R$ {Number(lead.estimatedValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                      <select aria-label={`Etapa de ${lead.name}`} value={lead.stage} onChange={e => changeLeadStage(lead.id, e.target.value)} className="p-2 border rounded-lg text-[10px]" style={fieldStyle}>{FUNNEL_STAGES.map(stage => <option key={stage}>{stage}</option>)}</select>
+                      <select aria-label={`Mensagem para ${lead.name}`} value="" onChange={e => { if (e.target.value) sendLeadMessage(lead, e.target.value); }} className="p-2 border rounded-lg text-[10px]" style={fieldStyle}><option value="">Mensagem...</option>{Object.entries(LEAD_MESSAGES).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}</select>
+                      {(lead.stage === 'Proposta enviada' || lead.stage === 'Consulta agendada') && <button type="button" onClick={() => convertLeadToCase(lead)} className="px-3 py-2 rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Contratou: abrir caso</button>}
+                      <button title="Excluir lead" onClick={() => { if (window.confirm('Excluir este lead?')) setLeads(prev => prev.filter((x: any) => x.id !== lead.id)); }} className="p-2 rounded-lg" style={{ color: PALETTE.descontos }}><Trash2 size={14}/></button>
+                    </div>
+                  </div>
+                  {docsLista.length > 0 && <details><summary className="text-[11px] font-bold cursor-pointer" style={{ color: PALETTE.textoPrincipal }}>Documentos {feitos}/{docsLista.length}</summary><div className="mt-2 space-y-1">{docsLista.map(item => <label key={item} className="flex items-start gap-2 text-[11px]" style={{ color: PALETTE.textoApoio }}><input type="checkbox" checked={Boolean(lead.docs?.[item])} onChange={() => toggleLeadDoc(lead.id, item)} />{item}</label>)}</div></details>}
+                </article>); })}
                 {leads.length === 0 && <div className="p-8 rounded-xl border text-center" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Nenhum lead cadastrado. Use o formulário acima para registrar a próxima oportunidade.</div>}
               </section>
             </div>
@@ -2549,13 +2724,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             <div className="space-y-5">
               <div><h3 className="font-serif font-bold text-xl" style={{ color: PALETTE.textoPrincipal }}>Relatórios gerenciais</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Indicadores calculados a partir dos registros disponíveis no sistema.</p></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Leads convertidos', value: leads.filter(l => l.stage === 'Contratado').length }, { label: 'Conversão do funil', value: `${leads.length ? Math.round(leads.filter(l => l.stage === 'Contratado').length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
+                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Leads convertidos', value: leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length }, { label: 'Conversão do funil', value: `${leads.length ? Math.round(leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Processos por área</h4>{dashboardAreaData.map(row => <div key={row.label} className="space-y-1"><div className="flex justify-between text-xs" style={{ color: PALETTE.textoPrincipal }}><span>{row.label}</span><strong>{row.count}</strong></div><div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${processes.length ? row.count / Math.max(1, processes.length) * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div></div>)}</section>
                 <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Resumo financeiro por status</h4>{['Recebido','Pendente','Atrasado','Pago'].map(status => { const amount = financialEntries.filter(e => e.status === status).reduce((sum,e) => sum + Number(e.amount || 0), 0); return <div key={status} className="flex justify-between py-2 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{status}</span><strong>R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></div>; })}</section>
               </div>
-              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Funil de captação</h4>{['Novo contato','Consulta agendada','Proposta enviada','Negociação','Contratado','Perdido'].map(stage => <div key={stage} className="flex items-center gap-3"><span className="w-36 text-xs" style={{ color: PALETTE.textoPrincipal }}>{stage}</span><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${leads.length ? leads.filter(l => l.stage === stage).length / leads.length * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div><strong className="w-6 text-right text-xs" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(l => l.stage === stage).length}</strong></div>)}</section>
+              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Contatos por origem e motivos de perda</h4><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div>{['Indicação','WhatsApp','Instagram','Site','Google','Outro'].map(o => <div key={o} className="flex justify-between py-1.5 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{o}</span><strong>{leads.filter((l: any) => l.source === o).length}</strong></div>)}</div><div>{LOST_REASONS.map(r => <div key={r} className="flex justify-between py-1.5 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{r}</span><strong>{leads.filter((l: any) => l.stage === 'Perdido' && l.lostReason === r).length}</strong></div>)}</div></div></section>
+              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Funil de captação</h4>{FUNNEL_STAGES.map(stage => <div key={stage} className="flex items-center gap-3"><span className="w-36 text-xs" style={{ color: PALETTE.textoPrincipal }}>{stage}</span><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${leads.length ? leads.filter(l => l.stage === stage).length / leads.length * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div><strong className="w-6 text-right text-xs" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(l => l.stage === stage).length}</strong></div>)}</section>
             </div>
           )}
 
@@ -2599,7 +2775,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Taxa Inadimplência</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.descontos }}>R$ {financialEntries.filter(x => x.status === 'Atrasado').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.descontos }}>{(() => { const rec = financialEntries.filter(x => x.kind === 'Receita'); const tot = rec.reduce((a, x) => a + Number(x.amount || 0), 0); const atr = rec.filter(x => x.status === 'Atrasado').reduce((a, x) => a + Number(x.amount || 0), 0); return `${tot ? Math.round(atr / tot * 100) : 0}% (R$ ${atr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`; })()}</p>
                 </div>
                 <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
                   <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Honorários a Receber</span>
@@ -2620,7 +2796,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   <input required min="0.01" step="0.01" type="number" aria-label="Valor" placeholder="Valor em R$" value={financialDraft.amount} onChange={e => setFinancialDraft(p => ({ ...p, amount: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
                   <input type="date" aria-label="Vencimento" value={financialDraft.dueDate} onChange={e => setFinancialDraft(p => ({ ...p, dueDate: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
                   <select aria-label="Status financeiro" value={financialDraft.status} onChange={e => setFinancialDraft(p => ({ ...p, status: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select>
-                  <div className="md:col-span-2 flex justify-end"><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Adicionar lançamento</button></div>
+                  <div className="md:col-span-2 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => promptInstallments()} className="px-4 py-2.5 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><Wallet size={14}/> Gerar parcelas de honorários</button><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Adicionar lançamento</button></div>
                 </form>
                 <div className="space-y-2">
                   {financialEntries.map(entry => <div key={entry.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
