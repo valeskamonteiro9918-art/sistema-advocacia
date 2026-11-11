@@ -365,6 +365,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboardSearch, setDashboardSearch] = useState('');
   const [agendaSubTab, setAgendaSubTab] = useState('prazos');
+  const [scanFilter, setScanFilter] = useState('pendentes');
+  const [scanSearch, setScanSearch] = useState('');
   const [workspaceSubTab, setWorkspaceSubTab] = useState('modelos');
 
   // Módulos novos: captação, financeiro, documentos, relatórios e configurações.
@@ -1533,6 +1535,34 @@ export default function App() {
     setImportList([]);
   };
 
+  // --- VARREDURA: lida / não lida / na agenda. Nada é excluído: as publicações ficam sempre arquivadas. ---
+  const scanStatusOf = (item: any) => item?.reviewStatus === 'Na agenda' ? 'agenda' : item?.reviewStatus === 'Lida' ? 'lida' : 'pendente';
+
+  const handleMarkScanRead = (id: string, read: boolean) => {
+    setScannedPush(prev => prev.map((s: any) => {
+      if (s.id !== id) return s;
+      if (s.reviewStatus === 'Na agenda') return s;
+      return read
+        ? { ...s, reviewStatus: 'Lida', readAt: new Date().toISOString() }
+        : { ...s, reviewStatus: 'Pendente de análise', readAt: undefined };
+    }));
+  };
+
+  const handleMarkAllScanRead = () => {
+    const total = scannedPush.filter((s: any) => scanStatusOf(s) === 'pendente').length;
+    if (!total) return;
+    if (!window.confirm(`Marcar ${total} publicação(ões) como lida(s)? Elas continuam salvas na aba "Lidas".`)) return;
+    const agora = new Date().toISOString();
+    setScannedPush(prev => prev.map((s: any) => scanStatusOf(s) === 'pendente' ? { ...s, reviewStatus: 'Lida', readAt: agora } : s));
+  };
+
+  const handleOpenScanInAgenda = (item: any) => {
+    const base = item?.agendaDate ? item.agendaDate.split('-').map(Number) : null;
+    if (base) setCurrentDate(new Date(base[0], base[1] - 1, 1));
+    setCalendarView('grid');
+    setAgendaSubTab('agenda');
+  };
+
   const handleMoveScanToAgenda = (item) => {
     let info: any = extractDeadlineInfo(item, true);
     if (!info) {
@@ -1564,7 +1594,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     };
     setDeadlines(prev => [...prev, agendaItem]);
     setProcessedScanKeys(prev => [...new Set([...prev, `${item.process}|${item.title}`])]);
-    setScannedPush(prev => prev.filter((s) => s.id !== item.id));
+    setScannedPush(prev => prev.map((s: any) => s.id === item.id ? { ...s, reviewStatus: 'Na agenda', readAt: s.readAt || new Date().toISOString(), agendaDate: info.dueDate, agendaDeadlineId: agendaItem.id } : s));
     // Leva você direto ao mês/dia na Agenda.
     const [y, m] = info.dueDate.split('-').map(Number);
     setCurrentDate(new Date(y, m - 1, 1));
@@ -1632,7 +1662,23 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     { label: 'Outras áreas', count: processes.filter((item) => !/trabalh|reclama|horas extras|c[ií]vel|fam[ií]lia|alimentos|guarda|indeniza|monit[oó]ria|jec/i.test(`${item.action || ''} ${item.court || ''}`)).length }
   ].filter((item) => item.count > 0 || processes.length === 0);
   const dashboardAreaMax = Math.max(1, ...dashboardAreaData.map((item) => item.count));
-  const dashboardRecentNotifications = [...scannedPush].slice(0, 3);
+  const dashboardRecentNotifications = scannedPush.filter((item: any) => scanStatusOf(item) === 'pendente').slice(0, 3);
+  const scanCounts = {
+    pendentes: scannedPush.filter((item: any) => scanStatusOf(item) === 'pendente').length,
+    lidas: scannedPush.filter((item: any) => scanStatusOf(item) === 'lida').length,
+    agenda: scannedPush.filter((item: any) => scanStatusOf(item) === 'agenda').length,
+    todas: scannedPush.length
+  };
+  const scanSearchTerm = scanSearch.trim().toLowerCase();
+  const scanVisible = scannedPush.filter((item: any) => {
+    const st = scanStatusOf(item);
+    if (scanFilter === 'pendentes' && st !== 'pendente') return false;
+    if (scanFilter === 'lidas' && st !== 'lida') return false;
+    if (scanFilter === 'agenda' && st !== 'agenda') return false;
+    if (!scanSearchTerm) return true;
+    const texto = `${item.process || ''} ${onlyDigits(item.process)} ${item.title || ''} ${item.snippet || ''} ${item.court || ''}`.toLowerCase();
+    return texto.includes(scanSearchTerm) || (onlyDigits(scanSearchTerm) && texto.includes(onlyDigits(scanSearchTerm)));
+  });
   const dashboardDateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   // --- TELA DE LOGIN (BLOQUEIA O ACESSO SE NÃO TIVER LOGADO) ---
@@ -1956,7 +2002,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
         <div className="p-6 flex-1 overflow-y-auto">
           {activeTab === 'agenda' && (
             <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              {[{ id: 'prazos', label: 'Prazos e intimações' }, { id: 'agenda', label: 'Agenda' }, { id: 'varredura', label: 'Varredura e sincronização' }].map(item => (
+              {[{ id: 'prazos', label: 'Prazos e intimações' }, { id: 'agenda', label: 'Agenda' }, { id: 'varredura', label: scannedPush.some((s: any) => scanStatusOf(s) === 'pendente') ? `Varredura e sincronização (${scannedPush.filter((s: any) => scanStatusOf(s) === 'pendente').length})` : 'Varredura e sincronização' }].map(item => (
                 <button key={item.id} onClick={() => setAgendaSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: agendaSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: agendaSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
                   {item.label}
                 </button>
@@ -2222,14 +2268,57 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 </button>
               </div>
 
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: 'pendentes', label: `Não lidas (${scanCounts.pendentes})` },
+                    { id: 'lidas', label: `Lidas (${scanCounts.lidas})` },
+                    { id: 'agenda', label: `Na agenda (${scanCounts.agenda})` },
+                    { id: 'todas', label: `Todas (${scanCounts.todas})` }
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setScanFilter(f.id)}
+                      className="px-3 py-1.5 rounded-full text-xs font-bold border transition"
+                      style={{ backgroundColor: scanFilter === f.id ? PALETTE.bordoPrincipal : 'transparent', color: scanFilter === f.id ? '#FFFFFF' : PALETTE.textoPrincipal, borderColor: scanFilter === f.id ? PALETTE.bordoPrincipal : PALETTE.linhasBordas }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    value={scanSearch}
+                    onChange={(e) => setScanSearch(e.target.value)}
+                    placeholder="Buscar por processo, assunto ou texto"
+                    aria-label="Buscar nas publicações"
+                    className="px-3 py-1.5 rounded-lg border text-xs w-full sm:w-64"
+                    style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}
+                  />
+                  {scanCounts.pendentes > 0 && (
+                    <button onClick={handleMarkAllScanRead} className="px-3 py-1.5 rounded-lg text-xs font-bold border" style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>
+                      Marcar todas como lidas
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-3">
-                {scannedPush.map((item) => (
-                  <div key={item.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas }}>
+                {scanVisible.map((item: any) => {
+                  const st = scanStatusOf(item);
+                  return (
+                  <div key={item.id} className="p-4 rounded-xl border bg-white shadow-sm space-y-2" style={{ borderColor: PALETTE.linhasBordas, borderLeftWidth: 4, borderLeftColor: st === 'pendente' ? PALETTE.bordoPrincipal : PALETTE.linhasBordas, opacity: st === 'pendente' ? 1 : 0.85 }}>
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style={{ backgroundColor: `${PALETTE.dourado}30`, color: PALETTE.bordoEscuro }}>
-                          {item.court}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style={{ backgroundColor: `${PALETTE.dourado}30`, color: PALETTE.bordoEscuro }}>
+                            {item.court}
+                          </span>
+                          {st === 'pendente' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Não lida</span>}
+                          {st === 'lida' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded border" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Lida</span>}
+                          {st === 'agenda' && <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Na agenda{item.agendaDate ? ` em ${item.agendaDate.split('-').reverse().join('/')}` : ''}</span>}
+                        </div>
                         <h4 className="font-bold text-sm mt-1" style={{ color: PALETTE.textoPrincipal }}>{item.title}</h4>
                         <p className="text-xs font-mono" style={{ color: PALETTE.textoPrincipal }}>Proc: {item.process}</p>
                       </div>
@@ -2239,23 +2328,58 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                     <p className="text-xs p-2.5 rounded border italic" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>
                       "{item.snippet}"
                     </p>
-                    {item.candidateDeadline && <div className="text-xs p-2.5 rounded-lg border" style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', color: '#9A3412' }}><strong>Possível prazo identificado:</strong> {item.candidateDeadline.dueDate.split('-').reverse().join('/')} · {item.candidateDeadline.type === 'FATAL' ? 'Prazo' : 'Compromisso'}. <strong>Ainda não confirmado.</strong> Confira o teor da publicação, termo inicial, regra de contagem e calendário do tribunal antes de incluir na agenda.</div>}
+                    {st !== 'agenda' && item.candidateDeadline && <div className="text-xs p-2.5 rounded-lg border" style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA', color: '#9A3412' }}><strong>Possível prazo identificado:</strong> {item.candidateDeadline.dueDate.split('-').reverse().join('/')} · {item.candidateDeadline.type === 'FATAL' ? 'Prazo' : 'Compromisso'}. <strong>Ainda não confirmado.</strong> Confira o teor da publicação, termo inicial, regra de contagem e calendário do tribunal antes de incluir na agenda.</div>}
 
-                    <div className="flex justify-end pt-1">
-                      <button
-                        onClick={() => handleMoveScanToAgenda(item)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow hover:brightness-110 transition"
-                        style={{ backgroundColor: PALETTE.bordoPrincipal }}
-                      >
-                        <CalendarIcon size={14} /> Conferir e adicionar à Agenda
-                      </button>
+                    <div className="flex flex-wrap justify-end gap-2 pt-1">
+                      {st === 'pendente' && (
+                        <button
+                          onClick={() => handleMarkScanRead(item.id, true)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 hover:bg-black/5 transition"
+                          style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}
+                        >
+                          Marcar como lida
+                        </button>
+                      )}
+                      {st === 'lida' && (
+                        <button
+                          onClick={() => handleMarkScanRead(item.id, false)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border hover:bg-black/5 transition"
+                          style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}
+                        >
+                          Marcar como não lida
+                        </button>
+                      )}
+                      {st === 'agenda' ? (
+                        <button
+                          onClick={() => handleOpenScanInAgenda(item)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow hover:brightness-110 transition"
+                          style={{ backgroundColor: PALETTE.bordoPrincipal }}
+                        >
+                          <CalendarIcon size={14} /> Ver na Agenda
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleMoveScanToAgenda(item)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow hover:brightness-110 transition"
+                          style={{ backgroundColor: PALETTE.bordoPrincipal }}
+                        >
+                          <CalendarIcon size={14} /> Conferir e adicionar à Agenda
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
-                {scannedPush.length === 0 && (
+                {scanVisible.length === 0 && (
                   <div className="text-center py-8 text-xs italic" style={{ color: PALETTE.textoApoio }}>
-                    Nenhuma nova intimação pendente na varredura.
+                    {scannedPush.length === 0
+                      ? 'Nenhuma publicação recebida ainda.'
+                      : scanSearchTerm
+                        ? 'Nenhuma publicação encontrada para essa busca.'
+                        : scanFilter === 'pendentes'
+                          ? 'Nenhuma publicação não lida. As anteriores estão salvas nas abas Lidas, Na agenda e Todas.'
+                          : 'Nenhuma publicação nesta aba.'}
                   </div>
                 )}
               </div>
