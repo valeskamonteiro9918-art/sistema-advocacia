@@ -1,5 +1,5 @@
 // VERSÃO DE 13/11/2026 (sexta-feira)
-// Última alteração: aviso de 30 dias sem movimentação + verificação automática da última movimentação de TODOS os processos (Gmail e CNJ) com alerta de falha.
+// Última alteração: cada processo mostra sua última movimentação (data, descrição, fonte e dias parado); verificação automática Gmail/CNJ; aviso de 30 dias.
 // REVISAO 02 — CRM com ficha ampliada de atendimento e triagem
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
@@ -1797,6 +1797,19 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     })
     .filter(Boolean)
     .sort((a: any, b: any) => b.dias - a.dias) as { proc: any; dias: number; ultima: Date }[];
+  // Última movimentação registrada de um processo (para mostrar no cartão do processo)
+  const lastMovementOf = (p: any) => {
+    const digits = onlyDigits(p.number);
+    let melhor: any = null;
+    processMovements.forEach((m: any) => {
+      if (onlyDigits(m.process) !== digits) return;
+      const d = dayFromValue(m.date);
+      if (!d) return;
+      if (!melhor || d.getTime() > melhor.d.getTime()) melhor = { d, title: m.title || m.description || 'Movimentação', source: m.source || '' };
+    });
+    if (!melhor) return null;
+    return { ...melhor, dias: Math.floor((inactivityToday.getTime() - melhor.d.getTime()) / 86400000) };
+  };
   const inactivityKey = inactivityAlerts.map((a) => onlyDigits(a.proc.number)).join(',');
 
   useEffect(() => {
@@ -2651,6 +2664,19 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                       </div>
                       <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{proc.client}</h4>
                       <p className="text-xs" style={{ color: PALETTE.textoApoio }}>{proc.action} • {proc.court}</p>
+                      {(() => {
+                        const ult = lastMovementOf(proc);
+                        if (!ult) {
+                          const desde = dayFromValue(proc.monitorSince);
+                          return <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>Última movimentação: nenhuma localizada no Gmail nem no CNJ{desde ? ` (contagem desde ${desde.toLocaleDateString('pt-BR')})` : ''}.</p>;
+                        }
+                        const parado = ult.dias >= INACTIVITY_LIMIT_DAYS;
+                        return (
+                          <p className="text-[11px]" style={{ color: parado ? '#9A3412' : PALETTE.textoApoio }}>
+                            <strong>Última movimentação:</strong> {ult.d.toLocaleDateString('pt-BR')} ({ult.dias <= 0 ? 'hoje' : ult.dias === 1 ? 'há 1 dia' : `há ${ult.dias} dias`}) · {String(ult.title).slice(0, 140)}{ult.source ? ` · Fonte: ${ult.source}` : ''}
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     <div className="text-right flex sm:flex-col justify-between w-full sm:w-auto items-center sm:items-end">
