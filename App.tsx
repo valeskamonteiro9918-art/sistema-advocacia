@@ -1,3 +1,5 @@
+// VERSÃO DE 13/11/2026 (sexta-feira)
+// Última alteração: aviso de 30 dias sem movimentação + verificação automática da última movimentação de TODOS os processos (Gmail e CNJ) com alerta de falha.
 // REVISAO 02 — CRM com ficha ampliada de atendimento e triagem
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
@@ -707,6 +709,23 @@ export default function App() {
   // passa a ser public.office_workspace_state, acessada por meio de office_workspace_members.
   // A tabela antiga office_app_state é preservada e não recebe novas gravações por este código.
   const [dataHydrated, setDataHydrated] = useState(false);
+  // --- AVISO DE PROCESSO PARADO: 30 dias sem movimentação/diligência ---
+  const [inactivityTick, setInactivityTick] = useState(Date.now());
+  const [inactivityOpen, setInactivityOpen] = useState(true);
+  const [movCheck, setMovCheck] = useState<any>({ running: false, error: '', datajudErro: '', gmailErro: '' });
+  const movCheckRunningRef = useRef(false);
+  useEffect(() => {
+    const t = window.setInterval(() => setInactivityTick(Date.now()), 30 * 60 * 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  // Processo sem data de início da contagem recebe a data de hoje (evita avisos em massa no primeiro dia).
+  useEffect(() => {
+    if (!dataHydrated) return;
+    if (!processes.some((p: any) => !p.monitorSince)) return;
+    const d = new Date();
+    const hojeISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setProcesses((prev: any[]) => prev.map((p) => p.monitorSince ? p : { ...p, monitorSince: hojeISO }));
+  }, [dataHydrated, processes]);
   const [sharedOfficeId, setSharedOfficeId] = useState<string | null>(null);
   const [persistenceStatus, setPersistenceStatus] = useState('Carregando dados...');
   const [lastSavedAt, setLastSavedAt] = useState('');
@@ -1538,6 +1557,100 @@ export default function App() {
   // --- VARREDURA: lida / não lida / na agenda. Nada é excluído: as publicações ficam sempre arquivadas. ---
   const scanStatusOf = (item: any) => item?.reviewStatus === 'Na agenda' ? 'agenda' : item?.reviewStatus === 'Lida' ? 'lida' : 'pendente';
 
+  // Registra uma movimentação/diligência feita por você; zera a contagem de 30 dias do processo.
+  const handleRegisterMovement = (proc: any) => {
+    const texto = window.prompt(`Descreva a movimentação ou diligência realizada no processo ${proc.number} (ex.: petição protocolada, contato com o cliente, andamento conferido):`);
+    if (texto === null) return;
+    const d = new Date();
+    const hojeISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const titulo = texto.trim() || 'Movimentação registrada manualmente';
+    const id = `mov-manual-${Date.now()}`;
+    setProcessMovements((prev: any[]) => [{
+      id,
+      process: proc.number,
+      client: proc.client || '',
+      title: titulo,
+      description: titulo,
+      date: hojeISO,
+      court: proc.court || '',
+      source: 'Manual',
+      sourceId: id
+    }, ...prev]);
+    setInactivityTick(Date.now());
+    setPersistenceStatus(`Movimentação registrada no processo ${proc.number}. A contagem de 30 dias recomeçou hoje.`);
+  };
+
+  const handleEnableBrowserAlerts = async () => {
+    try {
+      if (typeof Notification === 'undefined') { window.alert('Este navegador não permite avisos.'); return; }
+      await Notification.requestPermission();
+      setInactivityTick(Date.now());
+    } catch (_e) { /* ignora */ }
+  };
+
+  // Verifica a ÚLTIMA movimentação de todos os processos ativos (Gmail e CNJ) e grava no histórico.
+  const isProcessClosed = (p: any) => /arquiv|encerr|baix|extint|transit|conclu/i.test(String(p?.status || ''));
+  const runMovementCheck = async (silent = false) => {
+    if (movCheckRunningRef.current) return;
+    const alvo = processes.filter((p: any) => !isProcessClosed(p) && p.number);
+    if (!alvo.length) return;
+    movCheckRunningRef.current = true;
+    setMovCheck((prev: any) => ({ ...prev, running: true, error: '' }));
+    const agora = new Date().toISOString();
+    const resultados: any[] = [];
+    let erro = '';
+    let gmailErro = '';
+    let datajudErro = '';
+    try {
+      for (let i = 0; i < alvo.length; i += 30) {
+        const lote = alvo.slice(i, i + 30).map((p: any) => p.number);
+        const { data, error } = await supabase.functions.invoke('process-movements', { body: { numbers: lote } });
+        if (error) throw error;
+        if (!Array.isArray(data?.results)) throw new Error('Resposta inválida da função process-movements.');
+        resultados.push(...data.results);
+        if (data.gmailErro) gmailErro = data.gmailErro;
+        if (data.datajudErro) datajudErro = data.datajudErro;
+      }
+    } catch (e) {
+      console.error('Erro na verificação de movimentações:', e);
+      erro = 'A verificação automática não foi concluída. Confira se a função process-movements está criada no Supabase.';
+    }
+    if (resultados.length) {
+      const novos: any[] = [];
+      resultados.forEach((r: any) => {
+        const proc = alvo.find((p: any) => onlyDigits(p.number) === onlyDigits(r.number));
+        if (!proc) return;
+        const dig = onlyDigits(proc.number);
+        if (r.gmail?.date) {
+          const sid = `chk-gmail-${dig}-${r.gmail.date}`;
+          novos.push({ id: `mov-${sid}`, process: proc.number, client: proc.client || '', title: r.gmail.title, description: r.gmail.title, date: r.gmail.date, court: proc.court || '', source: 'Gmail (verificação)', sourceId: sid });
+        }
+        if (r.cnj?.date) {
+          const sid = `chk-cnj-${dig}-${r.cnj.date}`;
+          novos.push({ id: `mov-${sid}`, process: proc.number, client: proc.client || '', title: r.cnj.nome, description: r.cnj.nome, date: r.cnj.date, court: proc.court || '', source: 'CNJ (Datajud)', sourceId: sid });
+        }
+      });
+      setProcessMovements((prev: any[]) => [
+        ...novos.filter((n) => !prev.some((x: any) => x.sourceId === n.sourceId || (onlyDigits(x.process) === onlyDigits(n.process) && String(x.date || '').slice(0, 10) === n.date))),
+        ...prev
+      ]);
+      setProcesses((prev: any[]) => prev.map((p) => {
+        const r = resultados.find((x: any) => onlyDigits(x.number) === onlyDigits(p.number));
+        if (!r) return p;
+        const achou = !!(r.gmail?.date || r.cnj?.date);
+        return { ...p, movCheckedAt: agora, movCheckStatus: achou ? 'ok' : 'sem-dados' };
+      }));
+    }
+    setMovCheck({ running: false, error: erro, datajudErro, gmailErro });
+    movCheckRunningRef.current = false;
+    setInactivityTick(Date.now());
+    if (!silent) {
+      window.alert(erro
+        ? erro
+        : `Verificação concluída: ${resultados.filter((r: any) => r.gmail?.date || r.cnj?.date).length} de ${resultados.length} processo(s) com movimentação localizada.${datajudErro ? `\n\nAtenção: a consulta ao CNJ falhou (${datajudErro}). Foi usado só o Gmail.` : ''}`);
+    }
+  };
+
   const handleMarkScanRead = (id: string, read: boolean) => {
     setScannedPush(prev => prev.map((s: any) => {
       if (s.id !== id) return s;
@@ -1662,6 +1775,57 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     { label: 'Outras áreas', count: processes.filter((item) => !/trabalh|reclama|horas extras|c[ií]vel|fam[ií]lia|alimentos|guarda|indeniza|monit[oó]ria|jec/i.test(`${item.action || ''} ${item.court || ''}`)).length }
   ].filter((item) => item.count > 0 || processes.length === 0);
   const dashboardAreaMax = Math.max(1, ...dashboardAreaData.map((item) => item.count));
+  // Última movimentação = a mais recente entre o início da contagem e qualquer movimentação do processo
+  // (publicações do Gmail ou registros manuais). Avisa a partir de 30 dias sem nenhuma.
+  const INACTIVITY_LIMIT_DAYS = 30;
+  const dayFromValue = (v: any) => {
+    const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+  };
+  const inactivityToday = new Date(inactivityTick);
+  inactivityToday.setHours(0, 0, 0, 0);
+  const inactivityAlerts = processes
+    .filter((p: any) => !/arquiv|encerr|baix|extint|transit|conclu/i.test(String(p.status || '')))
+    .map((p: any) => {
+      const digits = onlyDigits(p.number);
+      const datas = [dayFromValue(p.monitorSince), ...processMovements.filter((m: any) => onlyDigits(m.process) === digits).map((m: any) => dayFromValue(m.date))]
+        .filter(Boolean) as Date[];
+      if (!datas.length) return null;
+      const ultima = new Date(Math.max(...datas.map((d) => d.getTime())));
+      const dias = Math.floor((inactivityToday.getTime() - ultima.getTime()) / 86400000);
+      return dias >= INACTIVITY_LIMIT_DAYS ? { proc: p, dias, ultima } : null;
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => b.dias - a.dias) as { proc: any; dias: number; ultima: Date }[];
+  const inactivityKey = inactivityAlerts.map((a) => onlyDigits(a.proc.number)).join(',');
+
+  useEffect(() => {
+    if (!inactivityAlerts.length) return;
+    try {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      const hoje = `${inactivityToday.getFullYear()}-${inactivityToday.getMonth() + 1}-${inactivityToday.getDate()}`;
+      const chave = `aviso-parado:${hoje}:${inactivityKey}`;
+      if (window.localStorage.getItem(chave)) return;
+      window.localStorage.setItem(chave, '1');
+      const lista = inactivityAlerts.slice(0, 3).map((a) => `${a.proc.number} (${a.dias} dias)`).join('\n');
+      new Notification(inactivityAlerts.length === 1 ? 'Processo precisa de movimentação' : `${inactivityAlerts.length} processos precisam de movimentação`, { body: lista });
+    } catch (_e) { /* sem permissão ou sem suporte: o aviso na tela continua */ }
+  }, [inactivityKey]);
+
+  // Verificação automática: ao abrir o sistema e a cada 30 minutos, refaz para quem estiver há mais de 20h sem verificação.
+  useEffect(() => {
+    if (!dataHydrated || !session?.user?.id || !sharedOfficeId) return;
+    const ativos = processes.filter((p: any) => !isProcessClosed(p) && p.number);
+    if (!ativos.length) return;
+    const vinteHoras = 20 * 3600 * 1000;
+    const todosRecentes = ativos.every((p: any) => p.movCheckedAt && inactivityTick - new Date(p.movCheckedAt).getTime() < vinteHoras);
+    if (!todosRecentes) void runMovementCheck(true);
+  }, [dataHydrated, session?.user?.id, sharedOfficeId, inactivityTick, processes.length]);
+
+  const movAtivos = processes.filter((p: any) => !isProcessClosed(p) && p.number);
+  const movNaoVerificados = movAtivos.filter((p: any) => !p.movCheckedAt || inactivityTick - new Date(p.movCheckedAt).getTime() > 48 * 3600 * 1000);
+  const movSemDados = movAtivos.filter((p: any) => p.movCheckStatus === 'sem-dados');
+
   const dashboardRecentNotifications = scannedPush.filter((item: any) => scanStatusOf(item) === 'pendente').slice(0, 3);
   const scanCounts = {
     pendentes: scannedPush.filter((item: any) => scanStatusOf(item) === 'pendente').length,
@@ -1997,6 +2161,50 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             </button>
           </div>
         </header>
+
+        {(movCheck.running || movCheck.error || movNaoVerificados.length > 0 || movSemDados.length > 0 || movCheck.datajudErro) && (
+          <div className="mx-6 mt-4 p-4 rounded-xl border text-xs space-y-1.5" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-sm">Verificação das movimentações dos processos</strong>
+              <button onClick={() => runMovementCheck(false)} disabled={movCheck.running} className="px-3 py-1 rounded-lg text-xs font-bold text-white disabled:opacity-50" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
+                {movCheck.running ? 'Verificando...' : 'Verificar agora'}
+              </button>
+            </div>
+            {movCheck.error && <p className="text-red-700 font-bold">{movCheck.error}</p>}
+            {movNaoVerificados.length > 0 && !movCheck.running && <p><strong>{movNaoVerificados.length} de {movAtivos.length}</strong> processo(s) sem verificação nas últimas 48 horas. Enquanto isso, a contagem de 30 dias usa só os dados já registrados.</p>}
+            {movCheck.datajudErro && <p>Consulta ao CNJ indisponível ({movCheck.datajudErro}). Usando apenas o Gmail.</p>}
+            {movSemDados.length > 0 && <p><strong>{movSemDados.length}</strong> processo(s) sem nenhuma movimentação localizada no Gmail nem no CNJ; a contagem deles parte da data em que entraram no sistema: {movSemDados.slice(0, 6).map((p: any) => p.number).join(', ')}{movSemDados.length > 6 ? ` e mais ${movSemDados.length - 6}` : ''}.</p>}
+          </div>
+        )}
+
+        {inactivityAlerts.length > 0 && (
+          <div className="mx-6 mt-4 p-4 rounded-xl border" style={{ backgroundColor: '#FFF7ED', borderColor: '#FDBA74', color: '#9A3412' }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong className="text-sm">
+                {inactivityAlerts.length === 1 ? '1 processo precisa de movimentação' : `${inactivityAlerts.length} processos precisam de movimentação`}: {INACTIVITY_LIMIT_DAYS} dias ou mais sem nenhuma movimentação ou diligência.
+              </strong>
+              <div className="flex gap-2">
+                {typeof Notification !== 'undefined' && Notification.permission === 'default' && (
+                  <button onClick={handleEnableBrowserAlerts} className="px-3 py-1 rounded-lg text-xs font-bold border" style={{ borderColor: '#9A3412' }}>Ativar aviso no navegador</button>
+                )}
+                <button onClick={() => setInactivityOpen((v) => !v)} className="px-3 py-1 rounded-lg text-xs font-bold border" style={{ borderColor: '#9A3412' }}>{inactivityOpen ? 'Ocultar lista' : 'Ver lista'}</button>
+              </div>
+            </div>
+            {inactivityOpen && (
+              <div className="mt-3 space-y-2 overflow-y-auto" style={{ maxHeight: 220 }}>
+                {inactivityAlerts.map((a) => (
+                  <div key={a.proc.id} className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA', color: PALETTE.textoPrincipal }}>
+                    <div>
+                      <span className="font-mono font-bold">{a.proc.number}</span> · {a.proc.client}
+                      <div style={{ color: PALETTE.textoApoio }}>{a.dias} dias sem movimentação (última em {a.ultima.toLocaleDateString('pt-BR')})</div>
+                    </div>
+                    <button onClick={() => handleRegisterMovement(a.proc)} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Registrar movimentação</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Dynamic Tab Body */}
         <div className="p-6 flex-1 overflow-y-auto">
@@ -2401,6 +2609,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
                 <div className="flex flex-wrap gap-2">
                   <button
+                    onClick={() => runMovementCheck(false)}
+                    disabled={movCheck.running}
+                    className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border shadow-sm hover:brightness-95 transition disabled:opacity-50"
+                    style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal, backgroundColor: PALETTE.fundoCartoes }}
+                  >
+                    <Search size={15} /> {movCheck.running ? 'Verificando...' : 'Verificar movimentações'}
+                  </button>
+                  <button
                     onClick={handleImportProcesses}
                     className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border shadow-sm hover:brightness-95 transition"
                     style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal, backgroundColor: PALETTE.fundoCartoes }}
@@ -2428,6 +2644,9 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                         </button>
                         <button onClick={() => { if (window.confirm('Excluir este processo?')) setProcesses(prev => prev.filter(p => p.id !== proc.id)); }} className="p-1 hover:bg-amber-50 rounded" title="Excluir processo">
                           <Trash2 size={13} className="text-amber-700" />
+                        </button>
+                        <button onClick={() => handleRegisterMovement(proc)} className="px-2 py-0.5 rounded text-[10px] font-bold border hover:bg-black/5" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }} title="Registrar movimentação ou diligência feita neste processo">
+                          Registrar movimentação
                         </button>
                       </div>
                       <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{proc.client}</h4>
