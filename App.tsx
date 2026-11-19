@@ -3,6 +3,9 @@
 // REVISAO 02 — CRM com ficha ampliada de atendimento e triagem
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import { mergeDefaultTemplates, rememberRemovedDefault } from './defaultTemplates';
+import { downloadDocx, textToParagraphs } from './docx';
+import FinanceModule, { financeSummary, brl as brlFmt } from './financeiro';
 import {
   Briefcase,
   Users,
@@ -243,6 +246,42 @@ async function saveRecoverySnapshotIfMissing(payload: any, key: string): Promise
   }
 }
 
+// Calendário forense: feriados nacionais, Carnaval, Paixão de Cristo, Corpus Christi,
+// Nossa Senhora da Penha (ES) e recesso forense (20/12 a 20/01, CPC art. 220).
+const holidayCache: Record<number, Set<string>> = {};
+function easterSunday(year: number) {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+function isoOf(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function holidaysOf(year: number) {
+  if (holidayCache[year]) return holidayCache[year];
+  const set = new Set<string>();
+  ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].forEach(md => set.add(`${year}-${md}`));
+  const easter = easterSunday(year);
+  const shift = (days: number) => { const d = new Date(easter); d.setDate(d.getDate() + days); return isoOf(d); };
+  [-48, -47, -2, 1, 60].forEach(n => set.add(shift(n))); // Carnaval (seg/ter), Sexta-feira da Paixão, Segunda da Penha (ES), Corpus Christi
+  holidayCache[year] = set;
+  return set;
+}
+function isForensicRecess(d: Date) {
+  const m = d.getMonth() + 1, day = d.getDate();
+  return (m === 12 && day >= 20) || (m === 1 && day <= 20);
+}
+function isBusinessDay(d: Date) {
+  const wd = d.getDay();
+  if (wd === 0 || wd === 6) return false;
+  if (isForensicRecess(d)) return false;
+  return !holidaysOf(d.getFullYear()).has(isoOf(d));
+}
 function estimateBusinessDaysUntil(dateValue: string) {
   if (!dateValue) return null;
   const today = new Date();
@@ -254,8 +293,7 @@ function estimateBusinessDaysUntil(dateValue: string) {
   const cursor = new Date(today);
   while (cursor < due) {
     cursor.setDate(cursor.getDate() + 1);
-    const weekday = cursor.getDay();
-    if (weekday !== 0 && weekday !== 6) count += 1;
+    if (isBusinessDay(cursor)) count += 1;
   }
   return count;
 }
@@ -678,7 +716,7 @@ export default function App() {
     }
   ]);
 
-  const [templates, setTemplates] = useState([
+  const [templates, setTemplates] = useState<any[]>(() => mergeDefaultTemplates([
     {
       id: '1',
       category: 'Cível / JEC',
@@ -700,7 +738,7 @@ export default function App() {
       description: 'Petição padrão informando andamento de citação e requerendo prosseguimento em audiência.',
       content: `EXCELENTÍSSIMO(A) SENHOR(A) DOUTOR(A) JUIZ(A) DA VARA DO TRABALHO DE VITÓRIA/ES\n\nProcesso nº: [NÚMERO DO PROCESSO]\n\n[NOME DO CLIENTE], por sua advogada Dra. Valeska Monteiro, vem respeitosamente requerer a juntada do comprovante de notificação e o regular prosseguimento do feito.`
     }
-  ]);
+  ]));
 
   const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
 
@@ -744,8 +782,9 @@ export default function App() {
     if (Array.isArray(saved.processMovements)) setProcessMovements(saved.processMovements);
     if (Array.isArray(saved.clientMessageDrafts)) setClientMessageDrafts(saved.clientMessageDrafts);
     if (Array.isArray(saved.templates)) {
-      setTemplates(saved.templates);
-      setSelectedTemplate(saved.templates[0] || null);
+      const merged = mergeDefaultTemplates(saved.templates);
+      setTemplates(merged);
+      setSelectedTemplate(merged[0] || null);
     }
     if (Array.isArray(saved.tasks)) setTasks(saved.tasks);
     if (Array.isArray(saved.leads)) setLeads(saved.leads.map(normalizeLead));
@@ -1028,8 +1067,8 @@ export default function App() {
   const handleMouseEnterItem = (e, item) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setHoverPos({
-      x: Math.min(Math.max(rect.left - 40, 10), window.innerWidth - 280),
-      y: rect.top < 220 ? rect.bottom + 8 : rect.top - 210
+      x: Math.min(Math.max(rect.left - 40, 10), window.innerWidth - 340),
+      y: rect.top < 240 ? rect.bottom + 8 : rect.top - 225
     });
     setHoveredDeadline(item);
   };
@@ -1307,7 +1346,7 @@ export default function App() {
       if (Array.isArray(data.clients)) setClients(data.clients);
       if (Array.isArray(data.deadlines)) setDeadlines(data.deadlines);
       if (Array.isArray(data.scannedPush)) setScannedPush(data.scannedPush);
-      if (Array.isArray(data.templates)) setTemplates(data.templates);
+      if (Array.isArray(data.templates)) setTemplates(mergeDefaultTemplates(data.templates));
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
       if (Array.isArray(data.leads)) setLeads(data.leads);
       if (Array.isArray(data.financialEntries)) setFinancialEntries(data.financialEntries);
@@ -1604,7 +1643,15 @@ export default function App() {
     try {
       for (let i = 0; i < alvo.length; i += 30) {
         const lote = alvo.slice(i, i + 30).map((p: any) => p.number);
-        const { data, error } = await supabase.functions.invoke('process-movements', { body: { numbers: lote } });
+        // Até 3 tentativas com espera crescente: o CNJ responde 429 (limite de consultas) em horários de pico.
+        let data: any = null; let error: any = null;
+        for (let tentativa = 0; tentativa < 3; tentativa++) {
+          const resp = await supabase.functions.invoke('process-movements', { body: { numbers: lote } });
+          data = resp.data; error = resp.error;
+          const limite = /429|too many|limite|rate/i.test(String(error?.message || '') + String(error?.context?.status || '') + String(data?.datajudErro || ''));
+          if (!error && !limite) break;
+          if (tentativa < 2) await new Promise(r => setTimeout(r, 2000 * (tentativa + 1) ** 2));
+        }
         if (error) throw error;
         if (!Array.isArray(data?.results)) throw new Error('Resposta inválida da função process-movements.');
         resultados.push(...data.results);
@@ -1989,34 +2036,35 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
       {/* FLOATING HOVER CARD FOR CALENDAR (Portal Strategy) */}
       {hoveredDeadline && (
         <div
-          className="fixed z-[9999] w-72 p-3.5 rounded-xl shadow-2xl border text-white space-y-2 pointer-events-none transition-all duration-150"
+          className="fixed z-[9999] w-80 p-3.5 rounded-xl shadow-2xl border space-y-2 pointer-events-none transition-all duration-150"
           style={{
             top: `${hoverPos.y}px`,
             left: `${hoverPos.x}px`,
-            backgroundColor: isDarkMode ? '#1E293B' : '#111827',
-            borderColor: MENU_PALETTE.linha
+            backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+            borderColor: isDarkMode ? MENU_PALETTE.linha : PALETTE.bordoPrincipal,
+            color: isDarkMode ? '#F9FAFB' : '#111827'
           }}
         >
-          <div className="flex justify-between items-start border-b pb-1.5" style={{ borderColor: `${PALETTE.dourado}50` }}>
-            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded text-black" style={{ backgroundColor: PALETTE.douradoClaro }}>
+          <div className="flex justify-between items-start border-b pb-1.5 gap-2" style={{ borderColor: PALETTE.linhasBordas }}>
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>
               {hoveredDeadline.dueTime}h • {hoveredDeadline.type}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: PALETTE.valoresReceber }}>
               {hoveredDeadline.status || 'Pendente'}
             </span>
           </div>
 
-          <h5 className="font-bold text-xs leading-tight" style={{ color: PALETTE.douradoClaro }}>
+          <h5 className="font-bold text-sm leading-snug" style={{ color: isDarkMode ? '#F5EEE9' : PALETTE.bordoPrincipal }}>
             {hoveredDeadline.title}
           </h5>
 
-          <div className="text-[11px] space-y-0.5 text-slate-200">
-            <p><strong className="text-amber-200">Cliente:</strong> {hoveredDeadline.client}</p>
-            <p><strong className="text-amber-200">Proc:</strong> {hoveredDeadline.process}</p>
-            <p><strong className="text-amber-200">Local:</strong> {hoveredDeadline.court}</p>
+          <div className="text-xs space-y-0.5">
+            <p><strong style={{ color: PALETTE.textoApoio }}>Cliente:</strong> {hoveredDeadline.client || 'Não informado'}</p>
+            <p><strong style={{ color: PALETTE.textoApoio }}>Processo:</strong> {hoveredDeadline.process || 'Não informado'}</p>
+            <p><strong style={{ color: PALETTE.textoApoio }}>Local:</strong> {hoveredDeadline.court || 'Não informado'}</p>
           </div>
-          
-          <p className="text-[9px] italic text-slate-400 border-t pt-1" style={{ borderColor: `${PALETTE.dourado}30` }}>
+
+          <p className="text-[10px] italic border-t pt-1" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>
             Clique para editar dados ou alterar status
           </p>
         </div>
@@ -2293,8 +2341,8 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 </div>
                 <div className="rounded-2xl border p-4 min-h-[104px] flex flex-col justify-between" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                   <div className="text-[10px] uppercase tracking-[0.12em] font-semibold" style={{ color: PALETTE.textoApoio }}>Honorários a receber</div>
-                  <div className="text-2xl md:text-[27px] font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{financialTotals.honorarios.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</div>
-                  <div className="text-[10px] font-semibold" style={{ color: PALETTE.valoresReceber }}>Total registrado nos processos</div>
+                  <div className="text-2xl md:text-[27px] font-serif leading-none" style={{ color: PALETTE.textoPrincipal }}>{financeSummary(financialEntries).aReceber.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}</div>
+                  <div className="text-[10px] font-semibold" style={{ color: PALETTE.valoresReceber }}>{financeSummary(financialEntries).aReceberVencido > 0 ? `${brlFmt(financeSummary(financialEntries).aReceberVencido)} já vencidos` : 'Nenhum valor vencido'}</div>
                 </div>
               </div>
 
@@ -2462,7 +2510,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 ); })}
                 {deadlines.length === 0 && <p className="text-center p-8 text-sm" style={{ color: PALETTE.textoApoio }}>Nenhum prazo cadastrado.</p>}
               </div>
-              <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>A estimativa considera dias de segunda a sexta e não desconta feriados nacionais, estaduais, municipais ou suspensões de expediente. Confirme sempre a contagem do prazo no sistema oficial aplicável.</p>
+              <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>A estimativa conta apenas dias úteis, desconta feriados nacionais, Carnaval, Paixão de Cristo, Corpus Christi, Nossa Senhora da Penha (ES) e o recesso forense de 20/12 a 20/01. Feriados municipais e suspensões específicas do tribunal não estão incluídos. Confirme sempre a contagem do prazo no sistema oficial aplicável.</p>
             </div>
           )}
 
@@ -2859,16 +2907,15 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                                 onMouseEnter={(e) => handleMouseEnterItem(e, item)}
                                 onMouseLeave={handleMouseLeaveItem}
                                 onClick={(e) => { e.stopPropagation(); setSelectedDeadlineModal({ ...item }); }}
-                                className="p-1.5 rounded text-[10px] font-bold cursor-pointer transition truncate border shadow-sm"
+                                className="px-1.5 py-1 rounded text-[10px] font-bold cursor-pointer transition border shadow-sm"
                                 style={{
                                   backgroundColor: item.completed ? (isDarkMode ? '#17382F' : '#DDF4E9') : item.type === 'FATAL' ? (isDarkMode ? '#453621' : '#FBEDD4') : (isDarkMode ? '#3A3325' : '#F5F1E7'),
                                   color: item.completed ? (isDarkMode ? '#34D399' : '#24624D') : item.type === 'FATAL' ? (isDarkMode ? '#F59E0B' : '#8B5E1A') : (isDarkMode ? '#F5EEE9' : '#775B28'),
                                   borderColor: item.type === 'FATAL' ? (isDarkMode ? '#8D7042' : '#E5C17B') : PALETTE.dourado
                                 }}
                               >
-                                <span className={item.completed ? 'line-through opacity-70' : ''}>
-                                  {item.dueTime} • {item.title}
-                                </span>
+                                <span className={`block font-mono leading-tight ${item.completed ? 'line-through opacity-70' : ''}`}>{item.dueTime}</span>
+                                <span className={`block leading-tight break-words ${item.completed ? 'line-through opacity-70' : ''}`} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{item.title}</span>
                               </div>
                             ))}
                           </div>
@@ -2976,7 +3023,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                         <h4 className="font-bold text-xs mt-0.5" style={{ color: PALETTE.textoPrincipal }}>{tmpl.title}</h4>
                         <div className="flex gap-2 mt-2">
                           <button onClick={(e) => { e.stopPropagation(); setNewTemplate({ category: tmpl.category, title: tmpl.title, description: tmpl.description, content: tmpl.content }); setEditingItem({ type: 'template', data: { ...tmpl } }); setIsNewTemplateOpen(true); }} className="text-[10px] font-bold flex items-center gap-1" style={{ color: PALETTE.textoPrincipal }}><Pencil size={11}/> Editar</button>
-                          <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Excluir este modelo de peça?')) { setTemplates(prev => prev.filter(t => t.id !== tmpl.id)); if (selectedTemplate?.id === tmpl.id) setSelectedTemplate(templates.find(t => t.id !== tmpl.id) || null); } }} className="text-[10px] font-bold flex items-center gap-1 text-amber-800"><Trash2 size={11}/> Excluir</button>
+                          <button onClick={(e) => { e.stopPropagation(); if (window.confirm('Excluir este modelo de peça?')) { rememberRemovedDefault(String(tmpl.id)); setTemplates(prev => prev.filter(t => t.id !== tmpl.id)); if (selectedTemplate?.id === tmpl.id) setSelectedTemplate(templates.find(t => t.id !== tmpl.id) || null); } }} className="text-[10px] font-bold flex items-center gap-1 text-amber-800"><Trash2 size={11}/> Excluir</button>
                         </div>
                       </div>
                     ))}
@@ -2995,19 +3042,27 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                         </h3>
                       </div>
 
+                      <div className="flex flex-wrap gap-2 justify-end">
+                      <button
+                        onClick={() => downloadDocx(selectedTemplate.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'modelo', textToParagraphs(selectedTemplate.content))}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow"
+                        style={{ backgroundColor: PALETTE.bordoPrincipal }}
+                      >
+                        <FileText size={14} /> Baixar Word (.docx)
+                      </button>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(selectedTemplate.content);
-                          alert('Modelo copiado para a área de transferência!');
+                          try { navigator.clipboard.writeText(selectedTemplate.content); alert('Modelo copiado para a área de transferência!'); } catch { alert('Não foi possível copiar automaticamente. Selecione o texto e copie manualmente.'); }
                         }}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shadow"
                         style={{ backgroundColor: PALETTE.dourado }}
                       >
                         <Copy size={14} /> Copiar Peça
                       </button>
+                      </div>
                     </div>
 
-                    <pre className="p-4 rounded-xl border font-mono text-xs whitespace-pre-wrap leading-relaxed overflow-y-auto max-h-[500px]" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>
+                    <pre className="p-4 rounded-xl border font-sans text-[13px] whitespace-pre-wrap leading-relaxed overflow-y-auto max-h-[500px]" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>
                       {selectedTemplate.content}
                     </pre>
                   </div>
@@ -3135,60 +3190,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
           {/* TAB: FINANCEIRO */}
           {activeTab === 'finances' && (
-            <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              <div className="border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
-                <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>
-                  Financeiro Executivo
-                </h3>
-                <p className="text-xs" style={{ color: PALETTE.textoApoio }}>
-                  Gestão completa de honorários, fluxo de caixa, custas e prestação de contas.
-                </p>
-              </div>
-
-              {/* 1. KPIs */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Saldo em Conta</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.valoresReceber }}>R$ {(financialEntries.filter(x => x.kind === 'Receita' && x.status === 'Recebido').reduce((sum, x) => sum + Number(x.amount || 0), 0) - financialEntries.filter(x => x.kind === 'Despesa' && x.status === 'Pago').reduce((sum, x) => sum + Number(x.amount || 0), 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Projeção 30/60/90d</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.textoPrincipal }}>R$ {financialEntries.filter(x => x.kind === 'Receita' && x.status === 'Pendente').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Taxa Inadimplência</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.descontos }}>{(() => { const rec = financialEntries.filter(x => x.kind === 'Receita'); const tot = rec.reduce((a, x) => a + Number(x.amount || 0), 0); const atr = rec.filter(x => x.status === 'Atrasado').reduce((a, x) => a + Number(x.amount || 0), 0); return `${tot ? Math.round(atr / tot * 100) : 0}% (R$ ${atr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`; })()}</p>
-                </div>
-                <div className="p-4 rounded-xl border bg-white shadow-sm space-y-1" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: PALETTE.textoApoio }}>Honorários a Receber</span>
-                  <p className="text-xl font-bold font-mono" style={{ color: PALETTE.valoresReceber }}>R$ {financialEntries.filter(x => x.kind === 'Receita' && x.status === 'Pendente').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                </div>
-              </div>
-
-              <section className="p-4 rounded-xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                <div className="border-b pb-3" style={{ borderColor: PALETTE.linhasBordas }}>
-                  <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Lançamentos financeiros</h4>
-                  <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Registre honorários, parcelas, custas e despesas. Os valores abaixo ficam salvos neste navegador.</p>
-                </div>
-                <form onSubmit={handleAddFinancialEntry} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <input required aria-label="Descrição do lançamento" placeholder="Descrição do lançamento" value={financialDraft.title} onChange={e => setFinancialDraft(p => ({ ...p, title: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                  <select aria-label="Tipo de lançamento" value={financialDraft.kind} onChange={e => setFinancialDraft(p => ({ ...p, kind: e.target.value, status: e.target.value === 'Receita' ? 'Pendente' : 'Pendente' }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Receita</option><option>Despesa</option></select>
-                  <select aria-label="Categoria" value={financialDraft.category} onChange={e => setFinancialDraft(p => ({ ...p, category: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Honorários</option><option>Custas processuais</option><option>Despesas operacionais</option><option>Consultoria</option><option>Outros</option></select>
-                  <input aria-label="Cliente" placeholder="Cliente (opcional)" value={financialDraft.client} onChange={e => setFinancialDraft(p => ({ ...p, client: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                  <input required min="0.01" step="0.01" type="number" aria-label="Valor" placeholder="Valor em R$" value={financialDraft.amount} onChange={e => setFinancialDraft(p => ({ ...p, amount: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                  <input type="date" aria-label="Vencimento" value={financialDraft.dueDate} onChange={e => setFinancialDraft(p => ({ ...p, dueDate: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                  <select aria-label="Status financeiro" value={financialDraft.status} onChange={e => setFinancialDraft(p => ({ ...p, status: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select>
-                  <div className="md:col-span-2 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => promptInstallments()} className="px-4 py-2.5 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><Wallet size={14}/> Gerar parcelas de honorários</button><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Adicionar lançamento</button></div>
-                </form>
-                <div className="space-y-2">
-                  {financialEntries.map(entry => <div key={entry.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
-                    <div className="min-w-0"><p className="text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>{entry.title}</p><p className="text-[10px] mt-1" style={{ color: PALETTE.textoApoio }}>{entry.kind} · {entry.category} {entry.client ? `· ${entry.client}` : ''} {entry.dueDate ? `· Vencimento ${entry.dueDate}` : ''}</p></div>
-                    <div className="flex items-center gap-3"><span className="text-xs font-bold" style={{ color: entry.kind === 'Receita' ? PALETTE.valoresReceber : PALETTE.descontos }}>{entry.kind === 'Despesa' ? '− ' : '+ '}R$ {Number(entry.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span><select aria-label="Alterar status do lançamento" value={entry.status} onChange={e => setFinancialEntries(prev => prev.map(x => x.id === entry.id ? { ...x, status: e.target.value } : x))} className="text-[10px] p-1.5 border rounded" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select><button type="button" title="Excluir lançamento" onClick={() => { if (window.confirm('Excluir este lançamento financeiro?')) setFinancialEntries(prev => prev.filter(x => x.id !== entry.id)); }} className="p-1" style={{ color: PALETTE.descontos }}><Trash2 size={13}/></button></div>
-                  </div>)}
-                  {financialEntries.length === 0 && <p className="text-xs text-center py-6" style={{ color: PALETTE.textoApoio }}>Nenhum lançamento cadastrado. Use o formulário acima para registrar receitas e despesas.</p>}
-                </div>
-              </section>
-            </div>
+            <FinanceModule PALETTE={PALETTE} entries={financialEntries} setEntries={setFinancialEntries} processes={processes} clients={clients} officeSettings={officeSettings} notify={setModuleNotice} promptInstallments={promptInstallments} />
           )}
 
           {/* TAB: TAREFAS - QUADRO DINÂMICO BITRIX24 */}
@@ -5335,10 +5337,11 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
               <div>
                 <label className="font-bold block mb-1">Categoria</label>
                 <select value={newTemplate.category} onChange={(e) => setNewTemplate({ ...newTemplate, category: e.target.value })} className="w-full p-2.5 border rounded-lg bg-white">
-                  <option value="Cível / JEC">Cível / JEC</option>
-                  <option value="Cível / Execução">Cível / Execução</option>
+                  <option value="Documentos do dia a dia">Documentos do dia a dia</option>
                   <option value="Trabalhista">Trabalhista</option>
                   <option value="Família">Família</option>
+                  <option value="Cível / JEC">Cível / JEC</option>
+                  <option value="Cível / Execução">Cível / Execução</option>
                 </select>
               </div>
               <div>
@@ -5351,7 +5354,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
               </div>
               <div>
                 <label className="font-bold block mb-1">Conteúdo do Modelo</label>
-                <textarea rows={6} value={newTemplate.content} onChange={(e) => setNewTemplate({ ...newTemplate, content: e.target.value })} className="w-full p-2.5 border rounded-lg font-mono text-xs" />
+                <textarea rows={10} value={newTemplate.content} onChange={(e) => setNewTemplate({ ...newTemplate, content: e.target.value })} className="w-full p-2.5 border rounded-lg font-sans text-xs" />
               </div>
 
               <div className="pt-3 flex justify-end gap-2">
