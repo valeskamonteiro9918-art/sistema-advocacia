@@ -436,7 +436,7 @@ export default function App() {
   useEffect(() => { try { sessionStorage.setItem('vm-nav-agenda', agendaSubTab); } catch { /* sem armazenamento */ } }, [agendaSubTab]);
   const [scanFilter, setScanFilter] = useState('pendentes');
   const [scanSearch, setScanSearch] = useState('');
-  const [workspaceSubTab, setWorkspaceSubTab] = useState(() => readNav('vm-nav-workspace', 'calculadoras', ['calculadoras', 'verbas']));
+  const [workspaceSubTab, setWorkspaceSubTab] = useState(() => readNav('vm-nav-workspace', 'calculadoras', ['calculadoras']));
   const [docSubTab, setDocSubTab] = useState(() => readNav('vm-nav-docs', 'modelos', ['modelos', 'arquivos']));
   useEffect(() => { try { sessionStorage.setItem('vm-nav-docs', docSubTab); } catch { /* sem armazenamento */ } }, [docSubTab]);
   useEffect(() => { try { sessionStorage.setItem('vm-nav-workspace', workspaceSubTab); } catch { /* sem armazenamento */ } }, [workspaceSubTab]);
@@ -501,7 +501,6 @@ export default function App() {
   const [catMenuOpen, setCatMenuOpen] = useState(false);
 
   // Selected Process for Financials
-  const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
 
   // Mouse hover state for portal popover positioning
   const [hoveredDeadline, setHoveredDeadline] = useState(null);
@@ -1056,7 +1055,6 @@ export default function App() {
   }, [sharedOfficeId]);
 
   // Financial selected process object
-  const selectedVerbasProc = processes.find((p) => p.id === selectedVerbasProcId) || processes[0];
 
   // Financial Totals Calculation
   const financialTotals = processes.reduce(
@@ -2398,15 +2396,6 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               ))}
             </div>
           )}
-          {activeTab === 'workspace' && (
-            <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              {[{ id: 'calculadoras', label: 'Calculadoras jurídicas' }, { id: 'verbas', label: 'Apuração de verbas' }].map(item => (
-                <button key={item.id} onClick={() => setWorkspaceSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: workspaceSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: workspaceSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
           {moduleNotice && ['leads', 'crm', 'finances', 'documents', 'settings'].includes(activeTab) && <div role="status" className="mb-4 p-3 rounded-xl border text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.valoresReceber }}>{moduleNotice}</div>}
           {activeTab === 'dashboard' && (
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4" role="tablist" aria-label="Tipo de painel">
@@ -3583,48 +3572,6 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
           )}
 
           {/* SUBABA: APURAÇÃO DE VERBAS POR PROCESSO */}
-          {activeTab === 'workspace' && workspaceSubTab === 'verbas' && (
-            <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              <div className="border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
-                <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Apuração de verbas por processo</h3>
-                <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Consulte e edite valores da causa, honorários contratados e descontos/custas diretamente na ficha do processo selecionado.</p>
-              </div>
-              {processes.length > 0 ? (
-                <>
-                  <div className="p-4 rounded-xl border space-y-3" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
-                    <label className="font-bold text-xs block" style={{ color: PALETTE.textoPrincipal }}>
-                      Selecionar processo
-                    </label>
-                    <select value={selectedVerbasProcId} onChange={(e) => setSelectedVerbasProcId(e.target.value)} className="w-full p-2.5 border rounded-xl font-bold text-xs" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}>
-                      {processes.map((p) => <option key={p.id} value={p.id}>{p.number} • {p.client} ({p.action})</option>)}
-                    </select>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-                      <label className="p-3 rounded-lg border block" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}>
-                        <span className="block text-[10px] font-bold uppercase" style={{ color: PALETTE.textoApoio }}>Valor total da causa (R$)</span>
-                        <input aria-label="Valor total da causa" type="number" min="0" step="0.01" value={selectedVerbasProc?.value ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, value: Number(e.target.value) } : p))} className="w-full mt-2 p-2 border rounded font-mono text-sm font-bold" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                      </label>
-                      <label className="p-3 rounded-lg border block" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}>
-                        <span className="block text-[10px] font-bold uppercase" style={{ color: PALETTE.valoresReceber }}>Honorários contratados (R$)</span>
-                        <input aria-label="Honorários contratados" type="number" min="0" step="0.01" value={selectedVerbasProc?.honorarios ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, honorarios: Number(e.target.value) } : p))} className="w-full mt-2 p-2 border rounded font-mono text-sm font-bold" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                      </label>
-                      <label className="p-3 rounded-lg border block" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}>
-                        <span className="block text-[10px] font-bold uppercase" style={{ color: PALETTE.descontos }}>Descontos e custas (R$)</span>
-                        <input aria-label="Descontos e custas" type="number" min="0" step="0.01" value={selectedVerbasProc?.descontos ?? 0} onChange={(e) => setProcesses(prev => prev.map(p => p.id === selectedVerbasProc.id ? { ...p, descontos: Number(e.target.value) } : p))} className="w-full mt-2 p-2 border rounded font-mono text-sm font-bold" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }} />
-                      </label>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>Valor da causa</p><p className="text-xl font-bold mt-2" style={{ color: PALETTE.textoPrincipal }}>{Number(selectedVerbasProc?.value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
-                    <div className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>Honorários</p><p className="text-xl font-bold mt-2" style={{ color: PALETTE.valoresReceber }}>{Number(selectedVerbasProc?.honorarios || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
-                    <div className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoPagina, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>Saldo estimado após descontos</p><p className="text-xl font-bold mt-2" style={{ color: PALETTE.textoPrincipal }}>{(Number(selectedVerbasProc?.value || 0) - Number(selectedVerbasProc?.descontos || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
-                  </div>
-                  <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os valores alterados são atualizados no estado do sistema e refletem nos indicadores do painel. A persistência definitiva no banco depende da integração existente do projeto.</p>
-                </>
-              ) : <p className="text-xs py-8 text-center" style={{ color: PALETTE.textoApoio }}>Cadastre um processo antes de apurar os valores.</p>}
-            </div>
-          )}
-
-          {/* TAB 8: CALCULADORAS JURÍDICAS */}
           {activeTab === 'workspace' && workspaceSubTab === 'calculadoras' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
