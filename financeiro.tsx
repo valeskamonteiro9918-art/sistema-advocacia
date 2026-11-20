@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadDocx, DocxParagraph } from './docx';
+import { fixCase } from './texto';
 
 // ---------------------------------------------------------------------------
 // Regras financeiras do escritório
@@ -183,11 +184,11 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
     if (!draft.title.trim() || Number(draft.amount) <= 0) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
     const done = draft.status === 'Recebido' || draft.status === 'Pago';
     if (editingId) {
-      update(editingId, { title: draft.title.trim(), kind: draft.kind, category: draft.category, client: draft.client.trim(), amount: Number(draft.amount), dueDate: draft.dueDate, status: draft.status });
+      update(editingId, { title: fixCase(draft.title.trim()), kind: draft.kind, category: draft.category, client: fixCase(draft.client.trim()), amount: Number(draft.amount), dueDate: draft.dueDate, status: draft.status });
       setEditingId(null); setIsEntryOpen(false); notify('Lançamento atualizado.');
       return;
     }
-    add([{ ...draft, amount: Number(draft.amount), paidAt: done ? today : undefined }]);
+    add([{ ...draft, title: fixCase(draft.title.trim()), client: fixCase(draft.client.trim()), amount: Number(draft.amount), paidAt: done ? today : undefined }]);
     setDraft({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
     setIsEntryOpen(false);
     notify('Lançamento financeiro cadastrado.');
