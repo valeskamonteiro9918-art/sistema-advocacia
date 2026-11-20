@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { downloadDocx, DocxParagraph } from './docx';
 
 // ---------------------------------------------------------------------------
@@ -119,7 +119,8 @@ type Props = {
 };
 
 export default function FinanceModule({ PALETTE, entries, setEntries, processes, clients, officeSettings, notify, promptInstallments, openClientFinance }: Props) {
-  const [tab, setTab] = useState<'resumo' | 'lancamentos' | 'relatorios' | 'mais'>('resumo');
+  const [tab, setTab] = useState<'resumo' | 'lancamentos' | 'relatorios' | 'mais'>(() => { try { const v = sessionStorage.getItem('vm-fin-tab'); return (['resumo', 'lancamentos', 'relatorios', 'mais'].includes(v || '') ? v : 'resumo') as any; } catch { return 'resumo'; } });
+  useEffect(() => { try { sessionStorage.setItem('vm-fin-tab', tab); } catch { /* sem armazenamento */ } }, [tab]);
   const [adv, setAdv] = useState<null | 'honorarios' | 'custas' | 'alvaras'>(null);
   const [isEntryOpen, setIsEntryOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
