@@ -2108,11 +2108,11 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
       {/* SIDEBAR NAVIGATION: recolhível no desktop e ocultável no celular */}
       <aside
-        className={`${isSidebarCollapsed ? 'hidden md:flex md:w-20' : 'flex w-full md:w-64'} border-r flex-shrink-0 flex-col justify-between transition-[width] duration-200 ease-in-out`}
+        className={`${isSidebarCollapsed ? 'hidden md:flex md:w-20' : 'flex w-full md:w-64'} border-r flex-shrink-0 flex-col justify-between md:sticky md:top-0 md:h-screen md:self-start md:overflow-hidden transition-[width] duration-200 ease-in-out`}
         style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}
         aria-label="Menu principal"
       >
-        <div>
+        <div className="md:flex-1 md:min-h-0 md:overflow-y-auto">
           <div className={`${isSidebarCollapsed ? 'px-2 pt-3 justify-center' : 'px-3 pt-3 justify-end'} flex`}>
             <button
               type="button"
@@ -2180,7 +2180,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
         </div>
 
         {/* Footer Info & Botão Sair */}
-        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'} border-t text-center text-[10px]`} style={{ borderColor: MENU_PALETTE.linha, color: MENU_PALETTE.destaque }}>
+        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'} border-t flex-shrink-0 text-center text-[10px]`} style={{ borderColor: MENU_PALETTE.linha, color: MENU_PALETTE.destaque }}>
           {!isSidebarCollapsed && <>
             <p className="font-semibold"></p>
             <p className="mt-0.5 mb-3" style={{ color: MENU_PALETTE.subtitulo }}></p>
