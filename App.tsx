@@ -2226,7 +2226,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               Advocacia & Consultoria Jurídica
             </h2>
             <p className="text-xs" style={{ color: MENU_PALETTE.subtitulo }}>
-              Dra. Valeska Monteiro • Serra / ES
+              {me ? me.name : 'Dra. Valeska Monteiro'} • Serra / ES
             </p>
             <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: isDarkMode ? '#9CA3AF' : '#D1D5DB' }} title={lastSavedAt ? `Último salvamento: ${new Date(lastSavedAt).toLocaleString('pt-BR')}` : 'Os dados são salvos automaticamente neste navegador'}>
               <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: persistenceStatus.includes('Erro') || persistenceStatus.includes('Falha') ? '#F5EEE9' : '#34D399' }} />
