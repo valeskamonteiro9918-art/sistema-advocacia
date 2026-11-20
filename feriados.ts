@@ -111,7 +111,7 @@ const TRIBUNAIS: [RegExp, string][] = [
   [/\bTJPR\b|\bTRT[\s-]*9\b(?!\d)/i, 'PR'], [/\bTJSC\b|\bTRT[\s-]*12\b/i, 'SC'], [/\bTJDFT\b|\bTRT[\s-]*10\b/i, 'DF'],
   [/\bTJCE\b|\bTRT[\s-]*7\b(?!\d)/i, 'CE'], [/\bTJPE\b|\bTRT[\s-]*6\b(?!\d)/i, 'PE'], [/\bTJGO\b|\bTRT[\s-]*18\b/i, 'GO']
 ];
-export const ufDoTribunal = (court: any) => { const t = String(court || ''); for (const [re, uf] of TRIBUNAIS) if (re.test(t)) return uf; return ''; };
+export const ufDoTribunal = (court: any) => { const t = String(court || ''); const sj = t.match(/\bSJ\s?([A-Z]{2})\b/); if (sj && UFS.includes(sj[1])) return sj[1]; for (const [re, uf] of TRIBUNAIS) if (re.test(t)) return uf; return ''; };
 
 // Comarca: usa o campo do processo; se vazio, tenta ler "... de Vitória" / "... Serra" do texto do tribunal.
 export function comarcaDoTexto(court: any) {
