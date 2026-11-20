@@ -18,7 +18,7 @@ type Props = {
   notify: (m: string) => void;
 };
 
-type Rename = { from: string; to: string; where: string[] };
+type Rename = { from: string; to: string; where: string[]; byFirst?: boolean };
 
 export function planNames(clients: any[], processes: any[], deadlines: any[], entries: any[]) {
   const found = new Map<string, { raw: Set<string>; where: Set<string> }>();
@@ -43,8 +43,12 @@ export function planNames(clients: any[], processes: any[], deadlines: any[], en
     }
     const tk = tokens(k);
     const cands = tk.size >= 2 ? clients.filter(c => { const ct = tokens(c.name); return [...tk].every(t => ct.has(t)); }) : [];
+    const first = k.split(' ')[0];
+    const sameFirst = clients.filter(c => norm(c.name).split(' ')[0] === first);
     if (cands.length === 1) {
       info.raw.forEach(r => renames.push({ from: r, to: String(cands[0].name), where: [...info.where] }));
+    } else if (sameFirst.length === 1) {
+      info.raw.forEach(r => renames.push({ from: r, to: String(sameFirst[0].name), where: [...info.where], byFirst: true }));
     } else {
       const canon = [...info.raw][0].trim();
       info.raw.forEach(r => { if (r !== canon) renames.push({ from: r, to: canon, where: [...info.where] }); });
@@ -124,7 +128,7 @@ export default function NamesTool({ PALETTE, clients, setClients, processes, set
               {plan.renames.map(r => (
                 <label key={r.from} className="flex items-start gap-2 p-2 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas }}>
                   <input type="checkbox" checked={isRen(r)} onChange={e => setPick(p => ({ ...p, [`r:${r.from}`]: e.target.checked }))} className="mt-0.5" />
-                  <span><b>"{r.from}"</b> → <b>{r.to}</b><span className="block text-[10px]" style={{ color: PALETTE.textoApoio }}>em {r.where.join(', ')}</span></span>
+                  <span><b>"{r.from}"</b> → <b>{r.to}</b><span className="block text-[10px]" style={{ color: PALETTE.textoApoio }}>em {r.where.join(', ')}{r.byFirst ? ' · mesmo primeiro nome, confira se é a mesma pessoa' : ''}</span></span>
                 </label>
               ))}
             </div>
