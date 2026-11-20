@@ -419,6 +419,7 @@ export default function App() {
   const [workspaceSubTab, setWorkspaceSubTab] = useState('modelos');
 
   // Módulos novos: captação, financeiro, documentos, relatórios e configurações.
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
   const [leads, setLeads] = useState<any[]>(() => (readLocalValue('vm-leads', []) as any[]).map(normalizeLead));
   const [leadDraft, setLeadDraft] = useState({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '', urgency: 'Verde', caseType: 'Divórcio', otherParty: '', nextActionDate: '', lostReason: '', originalMessage: '', city: '', existingProcess: '', childrenOrAssets: '', riskDetails: '', conflictStatus: 'Pendente de conferência', situation: 'Aguardando atendimento', responseAt: '' });
   const [financialEntries, setFinancialEntries] = useState<any[]>(() => readLocalValue('vm-financial-entries', []));
@@ -1244,6 +1245,7 @@ export default function App() {
     const nowIso = new Date().toISOString();
     const item = { ...leadDraft, id: `lead-${Date.now()}`, estimatedValue: Number(leadDraft.estimatedValue || 0), createdAt: nowIso, stageSince: nowIso, docs: {}, responseAt: nowIso };
     setLeads(prev => [item, ...prev]);
+    setIsLeadFormOpen(false);
     setLeadDraft({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '', urgency: 'Verde', caseType: 'Divórcio', otherParty: '', nextActionDate: '', lostReason: '', originalMessage: '', city: '', existingProcess: '', childrenOrAssets: '', riskDetails: '', conflictStatus: 'Pendente de conferência', situation: 'Aguardando atendimento', responseAt: '' });
     setModuleNotice('Lead cadastrado no funil.');
   };
@@ -3184,7 +3186,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
           {activeTab === 'leads' && (
             <div className="space-y-5">
               <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-                <div><h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Captação de clientes</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Acompanhe cada contato desde a primeira consulta até a contratação ou perda da oportunidade.</p></div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Captação de clientes</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Acompanhe cada contato desde a primeira consulta até a contratação ou perda da oportunidade.</p></div><button type="button" onClick={() => setIsLeadFormOpen(true)} className="px-4 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-2 w-fit shrink-0" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14} /> Novo contato</button></div>
+                {isLeadFormOpen && (
+                <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" style={{ backgroundColor: 'rgba(17,24,39,0.55)' }} role="dialog" aria-modal="true" aria-label="Novo contato" onMouseDown={e => { if (e.target === e.currentTarget) setIsLeadFormOpen(false); }}>
+                  <div className="w-full max-w-3xl rounded-2xl shadow-2xl p-5 space-y-4 my-auto" style={{ backgroundColor: PALETTE.fundoCartoes }}>
+                    <div className="flex items-start justify-between gap-3 border-b pb-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                      <div><h4 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Novo contato</h4><p className="text-xs mt-0.5" style={{ color: PALETTE.textoApoio }}>Preencha o que já souber. Nome, próxima ação e data são obrigatórios.</p></div>
+                      <button type="button" onClick={() => setIsLeadFormOpen(false)} aria-label="Fechar" className="p-1.5 rounded-lg hover:bg-black/5" style={{ color: PALETTE.textoPrincipal }}><X size={18} /></button>
+                    </div>
                 <form onSubmit={handleAddLead} className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <input required placeholder="Nome do potencial cliente" aria-label="Nome do potencial cliente" value={leadDraft.name} onChange={e => setLeadDraft(p => ({ ...p, name: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
                   <input placeholder="Telefone" aria-label="Telefone do lead" value={leadDraft.phone} onChange={e => setLeadDraft(p => ({ ...p, phone: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} />
@@ -3207,6 +3216,9 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   <input type="date" aria-label="Data da próxima ação" value={leadDraft.nextActionDate} onChange={e => setLeadDraft(p => ({ ...p, nextActionDate: e.target.value }))} className="p-2.5 border rounded-lg text-xs" style={fieldStyle} />
                   <div className="md:col-span-3 flex justify-end"><button type="submit" className="px-4 py-2.5 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Cadastrar lead</button></div>
                 </form>
+                  </div>
+                </div>
+                )}
               </section>
               {(() => { const stuck = leads.filter((l: any) => STAGE_MAX_DAYS[l.stage] && daysSinceISO(l.stageSince || l.createdAt) > STAGE_MAX_DAYS[l.stage]); return stuck.length ? <div className="p-3 rounded-xl border text-xs font-semibold" style={{ borderColor: '#B91C1C', color: '#B91C1C', backgroundColor: PALETTE.fundoCartoes }}>{stuck.length} contato(s) parado(s) além do prazo da etapa: {stuck.slice(0, 5).map((l: any) => l.name).join(', ')}</div> : null; })()}
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
