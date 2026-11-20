@@ -1052,6 +1052,7 @@ export default function App() {
       descontos: Number(newProcess.descontos || 0)
     };
     setProcesses(prev => [item, ...prev]);
+    if (garantirCliente(item.client)) setPersistenceStatus(`Cliente ${item.client} cadastrado em Clientes. Complete telefone e CPF quando puder.`);
     setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento', responsible: me?.id || 'valeska', area: '', uf: '', comarca: '' });
     setIsNewProcessOpen(false);
   };
@@ -1112,14 +1113,69 @@ export default function App() {
     setIsNewTemplateOpen(false);
   };
 
+  // ---- Ligações entre cadastros: os vínculos são feitos pelo NOME do cliente e pelo NÚMERO do processo. ----
+  const nomeKey = (v: any) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const mesmoNome = (a: any, b: any) => nomeKey(a) !== '' && nomeKey(a) === nomeKey(b);
+  const mesmoNumero = (a: any, b: any) => onlyDigits(a) !== '' && onlyDigits(a) === onlyDigits(b);
+  // Troca o nome do cliente em tudo que está ligado a ele.
+  const renomearClienteEmTudo = (de: string, para: string) => {
+    if (!de || !para || de === para) return;
+    const troca = (lista: any[], campo = 'client') => lista.map((x: any) => (mesmoNome(x?.[campo], de) ? { ...x, [campo]: para } : x));
+    setProcesses((p: any[]) => troca(p));
+    setDeadlines((p: any[]) => troca(p));
+    setFinancialEntries((p: any[]) => troca(p));
+    setDocuments((p: any[]) => troca(p));
+    setProcessMovements((p: any[]) => troca(p));
+    setClientMessageDrafts((p: any[]) => (Array.isArray(p) ? troca(p) : p));
+  };
+  // Troca o número do processo em tudo que está ligado a ele.
+  const renumerarProcessoEmTudo = (de: string, para: string) => {
+    if (!de || !para || de === para) return;
+    const troca = (lista: any[], campo = 'process') => (Array.isArray(lista) ? lista.map((x: any) => (mesmoNumero(x?.[campo], de) ? { ...x, [campo]: para } : x)) : lista);
+    setDeadlines((p: any[]) => troca(p));
+    setTasks((p: any[]) => troca(p));
+    setFinancialEntries((p: any[]) => troca(p));
+    setDocuments((p: any[]) => troca(p));
+    setProcessMovements((p: any[]) => troca(p));
+    setClientMessageDrafts((p: any[]) => troca(p));
+    setScannedPush((p: any[]) => troca(p));
+  };
+  // Garante que o cliente de um processo esteja em Clientes (só o nome; o resto ela completa depois).
+  const garantirCliente = (nome: string) => {
+    const n = String(nome || '').trim();
+    if (!n || /^cliente a vincular$/i.test(n)) return false;
+    if (clients.some((c: any) => mesmoNome(c.name, n))) return false;
+    setClients((prev: any[]) => (prev.some((c: any) => mesmoNome(c.name, n)) ? prev : [{ id: `cli-${Date.now()}`, name: n, type: 'Pessoa Física', document: '', phone: '', email: '', status: 'Ativo' }, ...prev]));
+    return true;
+  };
+  const resumoVinculosCliente = (nome: string) => {
+    const proc = processes.filter((p: any) => mesmoNome(p.client, nome)).length;
+    const prz = deadlines.filter((p: any) => mesmoNome(p.client, nome)).length;
+    const fin = financialEntries.filter((p: any) => mesmoNome(p.client, nome)).length;
+    return { proc, prz, fin, total: proc + prz + fin };
+  };
+  const resumoVinculosProcesso = (numero: string) => {
+    const prz = deadlines.filter((p: any) => mesmoNumero(p.process, numero)).length;
+    const tar = tasks.filter((p: any) => mesmoNumero(p.process, numero)).length;
+    const fin = financialEntries.filter((p: any) => mesmoNumero(p.process, numero)).length;
+    const doc = documents.filter((p: any) => mesmoNumero(p.process, numero)).length;
+    return { prz, tar, fin, doc, total: prz + tar + fin + doc };
+  };
+
   const saveEditedItem = () => {
     if (!editingItem) return;
     const { type, data } = editingItem;
     if (type === 'process') {
       const updated = { ...data, client: fixCase(data.client), action: fixCase(data.action), value: Number(data.value || 0), honorarios: Number(data.honorarios || 0), descontos: Number(data.descontos || 0) };
+      const antigo = processes.find((p: any) => p.id === updated.id);
       setProcesses(prev => prev.map(item => item.id === updated.id ? updated : item));
+      if (antigo && antigo.number !== updated.number) renumerarProcessoEmTudo(antigo.number, updated.number);
+      if (garantirCliente(updated.client)) setPersistenceStatus(`Cliente ${updated.client} cadastrado em Clientes. Complete telefone e CPF quando puder.`);
     } else if (type === 'client') {
-      setClients(prev => prev.map(item => item.id === data.id ? { ...data, name: fixCase(data.name) } : item));
+      const novoNome = fixCase(data.name);
+      const antigo = clients.find((c: any) => c.id === data.id);
+      setClients(prev => prev.map(item => item.id === data.id ? { ...data, name: novoNome } : item));
+      if (antigo && antigo.name !== novoNome) renomearClienteEmTudo(antigo.name, novoNome);
     }
     setEditingItem(null);
   };
@@ -2846,7 +2902,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                         <button onClick={() => setEditingItem({ type: 'process', data: { ...proc } })} className="p-1 hover:bg-black/5 rounded" title="Editar processo">
                           <Pencil size={13} style={{ color: PALETTE.dourado }} />
                         </button>
-                        <button onClick={() => { if (window.confirm('Excluir este processo?')) setProcesses(prev => prev.filter(p => p.id !== proc.id)); }} className="p-1 hover:bg-amber-50 rounded" title="Excluir processo">
+                        <button onClick={() => { { const v = resumoVinculosProcesso(proc.number); const aviso = v.total ? `\n\nEste processo tem ${[v.prz && `${v.prz} prazo(s)`, v.tar && `${v.tar} tarefa(s)`, v.fin && `${v.fin} lançamento(s) financeiro(s)`, v.doc && `${v.doc} documento(s)`].filter(Boolean).join(', ')} ligados a ele. Eles NÃO serão apagados.` : ''; if (window.confirm(`Excluir este processo?${aviso}`)) setProcesses(prev => prev.filter(p => p.id !== proc.id)); } }} className="p-1 hover:bg-amber-50 rounded" title="Excluir processo">
                           <Trash2 size={13} className="text-amber-700" />
                         </button>
                       </div>
@@ -2947,7 +3003,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                         <button onClick={() => setEditingItem({ type: 'client', data: { ...cli } })} className="p-1 hover:bg-black/5 rounded" title="Editar cliente">
                           <Pencil size={14} style={{ color: PALETTE.dourado }} />
                         </button>
-                        <button onClick={() => { if (window.confirm('Excluir este cliente?')) setClients(prev => prev.filter(c => c.id !== cli.id)); }} className="p-1 hover:bg-amber-50 rounded" title="Excluir cliente">
+                        <button onClick={() => { { const v = resumoVinculosCliente(cli.name); const aviso = v.total ? `\n\n${cli.name} tem ${[v.proc && `${v.proc} processo(s)`, v.prz && `${v.prz} prazo(s)`, v.fin && `${v.fin} lançamento(s) financeiro(s)`].filter(Boolean).join(', ')} ligados. Eles NÃO serão apagados, mas ficam sem o cadastro do cliente.` : ''; if (window.confirm(`Excluir este cliente?${aviso}`)) setClients(prev => prev.filter(c => c.id !== cli.id)); } }} className="p-1 hover:bg-amber-50 rounded" title="Excluir cliente">
                           <Trash2 size={14} className="text-amber-700" />
                         </button>
                       </div>
@@ -5454,11 +5510,12 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1">Cliente</label>
-                  <input type="text" list="lista-clientes" value={newDeadline.client} onChange={(e) => setNewDeadline({ ...newDeadline, client: e.target.value })} className="w-full p-2.5 border rounded-lg" />
+                  <input type="text" list="lista-clientes" value={newDeadline.client} onChange={(e) => { const v = e.target.value; const doCliente = processes.filter((p: any) => mesmoNome(p.client, v)); setNewDeadline({ ...newDeadline, client: v, process: !newDeadline.process && doCliente.length === 1 ? doCliente[0].number : newDeadline.process }); }} className="w-full p-2.5 border rounded-lg" />
                 </div>
                 <div>
                   <label className="font-bold block mb-1">Processo</label>
-                  <input type="text" value={newDeadline.process} onChange={(e) => setNewDeadline({ ...newDeadline, process: e.target.value })} className="w-full p-2.5 border rounded-lg" />
+                  <input type="text" list="lista-processos" value={newDeadline.process} onChange={(e) => { const v = e.target.value; const proc = processes.find((p: any) => mesmoNumero(p.number, v)); setNewDeadline({ ...newDeadline, process: proc ? proc.number : v, client: proc && !newDeadline.client ? proc.client : newDeadline.client }); }} className="w-full p-2.5 border rounded-lg" placeholder="Escolha da lista para ligar ao processo" />
+                  <datalist id="lista-processos">{processes.map((p: any) => <option key={p.id} value={p.number}>{p.client}</option>)}</datalist>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
