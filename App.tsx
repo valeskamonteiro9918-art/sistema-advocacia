@@ -583,8 +583,10 @@ export default function App() {
     honorarios: '',
     descontos: '',
     status: 'Em andamento',
-    responsible: 'valeska'
+    responsible: 'valeska',
+    area: ''
   });
+  const [areaFilter, setAreaFilter] = useState<string>('Todas');
 
   const [newClient, setNewClient] = useState({
     name: '',
@@ -1073,6 +1075,7 @@ export default function App() {
     const item = {
       id: Date.now().toString(),
       ...newProcess,
+      area: newProcess.area || processArea(newProcess),
       client: fixCase(newProcess.client),
       action: fixCase(newProcess.action),
       value: Number(newProcess.value || 0),
@@ -1080,7 +1083,7 @@ export default function App() {
       descontos: Number(newProcess.descontos || 0)
     };
     setProcesses(prev => [item, ...prev]);
-    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento', responsible: me?.id || 'valeska' });
+    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento', responsible: me?.id || 'valeska', area: '' });
     setIsNewProcessOpen(false);
   };
 
@@ -1879,11 +1882,16 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     .sort((a, b) => Number(b.honorarios || 0) - Number(a.honorarios || 0))
     .slice(0, 6);
   const dashboardChartMax = Math.max(1, ...dashboardChartProcesses.map((item) => Number(item.value || item.honorarios || 0)));
-  const dashboardAreaData = [
-    { label: 'Trabalhista', count: processes.filter((item) => /trabalh|reclama|horas extras/i.test(`${item.action || ''} ${item.court || ''}`)).length },
-    { label: 'Cível / Família', count: processes.filter((item) => /c[ií]vel|fam[ií]lia|alimentos|guarda|indeniza|monit[oó]ria|jec/i.test(`${item.action || ''} ${item.court || ''}`)).length },
-    { label: 'Outras áreas', count: processes.filter((item) => !/trabalh|reclama|horas extras|c[ií]vel|fam[ií]lia|alimentos|guarda|indeniza|monit[oó]ria|jec/i.test(`${item.action || ''} ${item.court || ''}`)).length }
-  ].filter((item) => item.count > 0 || processes.length === 0);
+  const PROCESS_AREAS = ['Trabalhista', 'Família', 'Cível', 'Outras áreas'];
+  const processArea = (p: any) => {
+    if (p && PROCESS_AREAS.includes(p.area)) return p.area;
+    const txt = `${p.action || ''} ${p.court || ''}`;
+    if (/trabalh|reclama|horas extras|\bTRT\b/i.test(txt)) return 'Trabalhista';
+    if (/fam[ií]lia|alimentos|guarda|uni[aã]o est[aá]vel|div[oó]rcio|partilha|invent[aá]rio|sucess|ado[cç][aã]o|reconhecimento de uni/i.test(txt)) return 'Família';
+    if (/c[ií]vel|indeniza|monit[oó]ria|jec|resolu[cç][aã]o contratual|cobran[cç]a|execu[cç][aã]o|juizado/i.test(txt)) return 'Cível';
+    return 'Outras áreas';
+  };
+  const dashboardAreaData = PROCESS_AREAS.map((label) => ({ label, count: processes.filter((p: any) => processArea(p) === label).length })).filter((x) => x.count > 0);
   const dashboardAreaMax = Math.max(1, ...dashboardAreaData.map((item) => item.count));
   // Última movimentação = a mais recente entre o início da contagem e qualquer movimentação do processo
   // (publicações do Gmail ou registros manuais). Avisa a partir de 30 dias sem nenhuma.
@@ -1931,20 +1939,19 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     setClientMessageDrafts((prev: any) => [{ id: `draft-manual-${Date.now()}`, process: proc.number, client: proc.client, phone: cliente?.phone || '', message, status: 'Aguardando sua revisão', createdAt: new Date().toISOString() }, ...(Array.isArray(prev) ? prev : [])]);
     if (!cliente?.phone) window.alert('Este cliente está sem telefone cadastrado. O texto foi preparado, mas para abrir o WhatsApp cadastre o telefone em Clientes.');
   };
-  const processArea = (p: any) => {
-    const txt = `${p.action || ''} ${p.court || ''}`;
-    if (/trabalh|reclama|horas extras|\bTRT\b/i.test(txt)) return 'Trabalhista';
-    if (/fam[ií]lia|alimentos|guarda|uni[aã]o est[aá]vel|div[oó]rcio|partilha|invent[aá]rio|sucess|ado[cç][aã]o|reconhecimento de uni/i.test(txt)) return 'Família';
-    if (/c[ií]vel|indeniza|monit[oó]ria|jec|resolu[cç][aã]o contratual|cobran[cç]a|execu[cç][aã]o|juizado/i.test(txt)) return 'Cível';
-    return 'Outras áreas';
-  };
-  const PROCESS_AREAS = ['Trabalhista', 'Família', 'Cível', 'Outras áreas'];
+  const AreaButtons = ({ value, onChange }: { value: string; onChange: (a: string) => void }) => (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Área do processo">
+      {PROCESS_AREAS.map(a => (
+        <button key={a} type="button" onClick={() => onChange(a)} aria-pressed={value === a} className="px-3 py-2 rounded-lg border text-xs font-bold transition" style={{ backgroundColor: value === a ? PALETTE.bordoPrincipal : 'transparent', color: value === a ? '#FFFFFF' : PALETTE.textoPrincipal, borderColor: value === a ? PALETTE.bordoPrincipal : PALETTE.linhasBordas }}>{a}</button>
+      ))}
+    </div>
+  );
   const sortedProcesses = () => {
     const lastTime = (p: any) => { const u = lastMovementOf(p); return u ? u.d.getTime() : (dayFromValue(p.monitorSince)?.getTime() || 0); };
     const byMov = (a: any, b: any) => lastTime(b) - lastTime(a);
     // número CNJ NNNNNNN-DD.AAAA.J.TR.OOOO: ordena por tribunal (J.TR), ano e sequência
     const numKey = (p: any) => { const m = String(p.number || '').match(/(\d{7})-?(\d{2})\.?(\d{4})\.?(\d)\.?(\d{2})\.?(\d{4})/); return m ? `${m[4]}${m[5]}${m[6]}${m[3]}${m[1]}` : String(p.number || '').replace(/\D/g, ''); };
-    const list = [...processes];
+    const list = processes.filter((p: any) => areaFilter === 'Todas' || processArea(p) === areaFilter);
     if (processSort === 'cliente') return list.sort((a: any, b: any) => String(a.client || '').localeCompare(String(b.client || ''), 'pt-BR', { sensitivity: 'base' }));
     if (processSort === 'numero') return list.sort((a: any, b: any) => numKey(a).localeCompare(numKey(b)));
     if (processSort === 'movimentacao') return list.sort(byMov);
@@ -2814,6 +2821,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 </div>
               </div>
 
+              <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label="Filtrar por área">
+                {['Todas', ...PROCESS_AREAS].map(a => {
+                  const n = a === 'Todas' ? processes.length : processes.filter((p: any) => processArea(p) === a).length;
+                  return (
+                    <button key={a} type="button" onClick={() => setAreaFilter(a)} aria-pressed={areaFilter === a} className="px-3 py-2 rounded-lg border text-xs font-bold transition" style={{ backgroundColor: areaFilter === a ? PALETTE.bordoPrincipal : 'transparent', color: areaFilter === a ? '#FFFFFF' : PALETTE.textoPrincipal, borderColor: areaFilter === a ? PALETTE.bordoPrincipal : PALETTE.linhasBordas }}>{a} ({n})</button>
+                  );
+                })}
+              </div>
               <div className="grid grid-cols-1 gap-4">
                 {sortedProcesses().map((proc, idx, arr) => (
                   <React.Fragment key={proc.id}>
@@ -5337,6 +5352,10 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                 <label className="font-bold block mb-1">Cliente</label>
                 <input type="text" required list="lista-clientes" value={newProcess.client} onChange={(e) => setNewProcess({ ...newProcess, client: e.target.value })} className="w-full p-2.5 border rounded-lg" placeholder="Nome do Cliente" />
               </div>
+              <div>
+                <label className="font-bold block mb-1">Área</label>
+                <AreaButtons value={newProcess.area} onChange={(a) => setNewProcess({ ...newProcess, area: a })} />
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1">Ação</label>
@@ -5432,6 +5451,12 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                   <input type={inputType || 'text'} value={editingItem.data[field] ?? ''} onChange={e => setEditingItem(prev => ({ ...prev, data: { ...prev.data, [field]: e.target.value } }))} className="w-full p-2.5 border rounded-lg"/>
                 </div>
               ))}
+              {editingItem.type === 'process' && (
+                <div>
+                  <label className="font-bold block mb-1">Área</label>
+                  <AreaButtons value={processArea(editingItem.data)} onChange={(a) => setEditingItem(prev => ({ ...prev, data: { ...prev.data, area: a } }))} />
+                </div>
+              )}
               {editingItem.type === 'process' && (
                 <div>
                   <label className="font-bold block mb-1">Responsável</label>
