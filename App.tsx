@@ -484,7 +484,7 @@ export default function App() {
   // Histórico processual e rascunhos de comunicação: nunca enviam mensagens automaticamente.
   const [processMovements, setProcessMovements] = useState<any[]>([]);
   const [clientMessageDrafts, setClientMessageDrafts] = useState<any[]>([]);
-  // --- MÓDULO DE TAREFAS ESTILO BITRIX24 ---
+  // --- MÓDULO DE TAREFAS DO ESCRITÓRIO ---
   const [taskDraft, setTaskDraft] = useState('');
   const [taskFilter, setTaskFilter] = useState('Todas');
   const [taskSearch, setTaskSearch] = useState('');
@@ -3279,7 +3279,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             <FinanceModule PALETTE={PALETTE} entries={financialEntries} setEntries={setFinancialEntries} processes={processes} clients={clients} officeSettings={officeSettings} notify={setModuleNotice} promptInstallments={promptInstallments} />
           )}
 
-          {/* TAB: TAREFAS - QUADRO DINÂMICO BITRIX24 */}
+          {/* TAB: TAREFAS - QUADRO DINÂMICO */}
           {activeTab === 'tasks' && (
             <div className="space-y-5">
               <div className="p-6 rounded-2xl border shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
@@ -3287,7 +3287,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   <div>
                     <h3 className="font-serif font-bold text-lg flex items-center gap-2" style={{ color: PALETTE.textoPrincipal }}>
                       <ClipboardList size={22} style={{ color: PALETTE.bordoPrincipal }} />
-                      Quadro de Tarefas (Bitrix24)
+                      Quadro de Tarefas
                     </h3>
                     <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>
                       Gerencie demandas, criadores, responsáveis, checklists, prazos e anexos. Clique no cartão para abrir a edição completa.
@@ -3412,7 +3412,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                                 </div>
                               )}
 
-                              {/* Indicadores estilo Bitrix24 */}
+                              {/* Indicadores */}
                               <div className="flex flex-wrap items-center gap-2 text-[9px]" style={{ color: PALETTE.textoApoio }}>
                                 {totalCheck > 0 && (
                                   <span className={`flex items-center gap-1 font-semibold ${completedCheck === totalCheck ? 'text-emerald-700' : ''}`}>
@@ -5599,7 +5599,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
         </div>
       )}
 
-      {/* MODAL DETALHADO DE EDIÇÃO DA TAREFA (MODO BITRIX24) */}
+      {/* MODAL DETALHADO DE EDIÇÃO DA TAREFA  */}
       {selectedTaskModal && (
         <div className="fixed inset-0 bg-black/60 z-[10000] flex items-center justify-center p-4">
           <div className="w-full max-w-2xl max-h-[92vh] flex flex-col p-6 rounded-2xl bg-white shadow-2xl space-y-4 overflow-hidden">
@@ -5608,7 +5608,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
               <div className="flex items-center gap-2">
                 <ClipboardList size={20} style={{ color: PALETTE.bordoPrincipal }} />
                 <h3 className="font-serif font-bold text-base" style={{ color: PALETTE.bordoEscuro }}>
-                  Detalhes da Tarefa (Bitrix24)
+                  Detalhes da Tarefa
                 </h3>
               </div>
               <button onClick={() => setSelectedTaskModal(null)} className="p-1 hover:bg-black/5 rounded"><X size={18} /></button>
