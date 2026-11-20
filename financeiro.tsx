@@ -115,12 +115,16 @@ type Props = {
   officeSettings: any;
   notify: (msg: string) => void;
   promptInstallments: (client?: string) => void;
+  openClientFinance?: (name: string) => void;
 };
 
-export default function FinanceModule({ PALETTE, entries, setEntries, processes, clients, officeSettings, notify, promptInstallments }: Props) {
+export default function FinanceModule({ PALETTE, entries, setEntries, processes, clients, officeSettings, notify, promptInstallments, openClientFinance }: Props) {
   const [tab, setTab] = useState<'resumo' | 'lancamentos' | 'relatorios' | 'mais'>('resumo');
   const [adv, setAdv] = useState<null | 'honorarios' | 'custas' | 'alvaras'>(null);
   const [isEntryOpen, setIsEntryOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [pickName, setPickName] = useState('');
   const today = todayLocal();
 
   const input = 'p-2.5 border rounded-lg text-xs w-full';
@@ -177,6 +181,11 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
     e.preventDefault();
     if (!draft.title.trim() || Number(draft.amount) <= 0) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
     const done = draft.status === 'Recebido' || draft.status === 'Pago';
+    if (editingId) {
+      update(editingId, { title: draft.title.trim(), kind: draft.kind, category: draft.category, client: draft.client.trim(), amount: Number(draft.amount), dueDate: draft.dueDate, status: draft.status });
+      setEditingId(null); setIsEntryOpen(false); notify('Lançamento atualizado.');
+      return;
+    }
     add([{ ...draft, amount: Number(draft.amount), paidAt: done ? today : undefined }]);
     setDraft({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
     setIsEntryOpen(false);
@@ -203,6 +212,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
         <select aria-label="Alterar status do lançamento" value={e.status} onChange={ev => update(e.id, { status: ev.target.value })} className="text-[10px] p-1.5 border rounded" style={inputStyle}>
           <option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option>
         </select>
+        <button type="button" aria-label="Editar lançamento" onClick={() => openEditEntry(e)} className="text-[10px] px-2 py-1.5 border rounded font-bold" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Editar</button>
         <button type="button" aria-label="Excluir lançamento" onClick={() => remove(e.id)} className="text-[10px] px-2 py-1.5 border rounded font-bold" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.descontos }}>Excluir</button>
       </div>
     </div>
@@ -252,7 +262,14 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
   const cobranca = (row: any) => `Olá, ${String(row.name).split(' ')[0]}! Passando para lembrar do pagamento dos honorários: ${brl(row.total)} em aberto${row.vencido > 0 ? `, sendo ${brl(row.vencido)} já vencidos` : ''}. Se precisar combinar de outra forma, é só me avisar. Obrigada!`;
 
   const openEntryForm = (kind: 'Receita' | 'Despesa') => {
+    setEditingId(null);
     setDraft({ title: '', kind, category: kind === 'Receita' ? 'Honorários' : 'Despesas operacionais', client: '', amount: '', dueDate: '', status: 'Pendente' });
+    setIsEntryOpen(true);
+  };
+
+  const openEditEntry = (e: any) => {
+    setEditingId(e.id);
+    setDraft({ title: e.title || '', kind: e.kind || 'Receita', category: e.category || 'Honorários', client: e.client || '', amount: String(e.amount ?? ''), dueDate: e.dueDate || '', status: e.status || 'Pendente' });
     setIsEntryOpen(true);
   };
 
@@ -261,7 +278,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => openEntryForm('Receita')} className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>+ Registrar entrada</button>
         <button type="button" onClick={() => openEntryForm('Despesa')} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>+ Registrar saída</button>
-        <button type="button" onClick={() => promptInstallments()} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Parcelar honorários de um cliente</button>
+        <button type="button" onClick={() => { setPickName(''); setPickOpen(true); }} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Plano de pagamento de um cliente</button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -323,14 +340,14 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
   );
 
   const renderEntryModal = () => !isEntryOpen ? null : (
-    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" style={{ backgroundColor: 'rgba(17,24,39,0.55)' }} role="dialog" aria-modal="true" aria-label={draft.kind === 'Receita' ? 'Registrar entrada' : 'Registrar saída'} onMouseDown={e => { if (e.target === e.currentTarget) setIsEntryOpen(false); }}>
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" style={{ backgroundColor: 'rgba(17,24,39,0.55)' }} role="dialog" aria-modal="true" aria-label={editingId ? 'Editar lançamento' : draft.kind === 'Receita' ? 'Registrar entrada' : 'Registrar saída'} onMouseDown={e => { if (e.target === e.currentTarget) setIsEntryOpen(false); }}>
       <form onSubmit={submitDraft} className="w-full max-w-lg rounded-2xl shadow-2xl p-5 space-y-3 my-auto" style={{ backgroundColor: PALETTE.fundoCartoes }}>
         <div className="flex items-start justify-between gap-3 border-b pb-3" style={{ borderColor: PALETTE.linhasBordas }}>
           <div>
-            <h4 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>{draft.kind === 'Receita' ? 'Registrar entrada' : 'Registrar saída'}</h4>
+            <h4 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>{editingId ? 'Editar lançamento' : draft.kind === 'Receita' ? 'Registrar entrada' : 'Registrar saída'}</h4>
             <p className="text-xs mt-0.5" style={{ color: PALETTE.textoApoio }}>{draft.kind === 'Receita' ? 'Dinheiro que você recebeu ou vai receber.' : 'Dinheiro que você pagou ou vai pagar.'}</p>
           </div>
-          <button type="button" onClick={() => setIsEntryOpen(false)} aria-label="Fechar" className="px-2 py-1 rounded-lg hover:bg-black/5 text-lg leading-none" style={{ color: PALETTE.textoPrincipal }}>×</button>
+          <button type="button" onClick={() => { setIsEntryOpen(false); setEditingId(null); }} aria-label="Fechar" className="px-2 py-1 rounded-lg hover:bg-black/5 text-lg leading-none" style={{ color: PALETTE.textoPrincipal }}>×</button>
         </div>
         <input required aria-label="Descrição do lançamento" placeholder={draft.kind === 'Receita' ? 'O que é? (ex.: honorários, 1ª parcela)' : 'O que é? (ex.: custas, internet)'} value={draft.title} onChange={e => setDraft(p => ({ ...p, title: e.target.value }))} className={input} style={inputStyle} />
         <input list="fin-clientes" aria-label="Cliente" placeholder="Cliente (se for de algum)" value={draft.client} onChange={e => setDraft(p => ({ ...p, client: e.target.value }))} className={input} style={inputStyle} />
@@ -347,9 +364,19 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
           <select aria-label="Categoria" value={draft.category} onChange={e => setDraft(p => ({ ...p, category: e.target.value }))} className={`${input} mt-2`} style={inputStyle}><option>Honorários</option><option>Custas processuais</option><option>Despesas do processo</option><option>Despesas operacionais</option><option>Consultoria</option><option>Outros</option></select>
         </details>
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={() => setIsEntryOpen(false)} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Cancelar</button>
+          <button type="button" onClick={() => { setIsEntryOpen(false); setEditingId(null); }} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Cancelar</button>
           <button type="submit" className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar</button>
         </div>
+      </form>
+    </div>
+  );
+
+  const renderPicker = () => !pickOpen ? null : (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3" style={{ backgroundColor: 'rgba(17,24,39,0.55)' }} role="dialog" aria-modal="true" aria-label="Escolher cliente" onMouseDown={e => { if (e.target === e.currentTarget) setPickOpen(false); }}>
+      <form onSubmit={e => { e.preventDefault(); if (!pickName.trim()) return; setPickOpen(false); openClientFinance ? openClientFinance(pickName.trim()) : promptInstallments(pickName.trim()); }} className="w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes }}>
+        <h4 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>De qual cliente?</h4>
+        <input autoFocus list="fin-clientes" aria-label="Cliente" placeholder="Digite ou escolha o cliente" value={pickName} onChange={e => setPickName(e.target.value)} className={input} style={inputStyle} />
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setPickOpen(false)} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Cancelar</button><button type="submit" className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>Abrir</button></div>
       </form>
     </div>
   );
@@ -825,6 +852,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
       {tab === 'relatorios' && <div className="space-y-5">{renderRelatorios()}{renderFluxo()}</div>}
       {tab === 'mais' && renderMais()}
       {renderEntryModal()}
+      {renderPicker()}
     </div>
   );
 }
