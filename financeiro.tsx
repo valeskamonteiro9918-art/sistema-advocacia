@@ -208,10 +208,10 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
           {isOverdue(e, today) ? ' · VENCIDO' : ''}
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+      <div className="flex items-center gap-2 shrink-0 md:justify-end">
         {extra}
-        <span className="text-xs font-bold whitespace-nowrap" style={{ color: e.kind === 'Receita' ? PALETTE.valoresReceber : PALETTE.descontos }}>{e.kind === 'Despesa' ? '− ' : '+ '}{brl(e.amount)}</span>
-        <select aria-label="Alterar status do lançamento" value={e.status} onChange={ev => update(e.id, { status: ev.target.value })} className="text-[10px] p-1.5 border rounded" style={inputStyle}>
+        <span className="w-[130px] text-right text-sm font-bold font-mono whitespace-nowrap" style={{ color: e.kind === 'Receita' ? PALETTE.valoresReceber : PALETTE.descontos }}>{e.kind === 'Despesa' ? '− ' : '+ '}{brl(e.amount)}</span>
+        <select aria-label="Alterar status do lançamento" value={e.status} onChange={ev => update(e.id, { status: ev.target.value })} className="w-[96px] text-[10px] p-1.5 border rounded" style={inputStyle}>
           <option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option>
         </select>
         <button type="button" aria-label="Editar lançamento" onClick={() => openEditEntry(e)} className="text-[10px] px-2 py-1.5 border rounded font-bold" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Editar</button>
@@ -302,7 +302,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
                 <p className="text-[11px] mt-0.5" style={{ color: row.vencido > 0 ? PALETTE.descontos : PALETTE.textoApoio }}>{row.vencido > 0 ? `${brl(row.vencido)} vencido · ` : ''}{row.itens} parcela{row.itens === 1 ? '' : 's'}{row.primeiro ? ` · próxima em ${fmtDate(row.primeiro)}` : ''}</p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-sm font-bold font-mono" style={{ color: PALETTE.valoresReceber }}>{brl(row.total)}</span>
+                <span className="w-[130px] text-right text-sm font-bold font-mono whitespace-nowrap" style={{ color: PALETTE.valoresReceber }}>+ {brl(row.total)}</span>
                 <button type="button" onClick={() => notify(copyText(cobranca(row)) ? 'Mensagem de cobrança copiada. Cole no WhatsApp.' : 'Não foi possível copiar.')} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Copiar cobrança</button>
               </div>
             </div>
@@ -561,7 +561,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
           {costs.slice().sort((a, b) => String(b.dueDate || '').localeCompare(String(a.dueDate || ''))).map(e => (
             <div key={e.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 p-3 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
               <div className="min-w-0"><p className="text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>{e.title}</p><p className="text-[10px] mt-1" style={{ color: PALETTE.textoApoio }}>{e.category}{e.client ? ` · ${e.client}` : ''}{e.process ? ` · Proc. ${e.process}` : ''} · {fmtDate(e.dueDate)}</p></div>
-              <div className="flex items-center gap-2"><span className="text-xs font-bold" style={{ color: PALETTE.descontos }}>− {brl(e.amount)}</span>
+              <div className="flex items-center gap-2"><span className="w-[130px] text-right text-sm font-bold font-mono whitespace-nowrap" style={{ color: PALETTE.descontos }}>− {brl(e.amount)}</span>
                 <select aria-label="Situação do reembolso" value={reimbStatus(e)} onChange={ev => setReimb(e, ev.target.value)} className="text-[10px] p-1.5 border rounded" style={inputStyle}><option>A reembolsar</option><option>Reembolsado</option><option>Não reembolsável</option></select>
                 <button type="button" aria-label="Excluir despesa" onClick={() => remove(e.id)} className="text-[10px] px-2 py-1.5 border rounded font-bold" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.descontos }}>Excluir</button></div>
             </div>
