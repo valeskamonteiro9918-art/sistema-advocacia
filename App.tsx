@@ -5,6 +5,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { mergeDefaultTemplates, rememberRemovedDefault } from './defaultTemplates';
 import { downloadDocx, textToParagraphs } from './docx';
+import { teamOf, memberByEmail, RESPONSIBLE_OPTIONS, processResponsible } from './equipe';
+import MeuPainel, { EquipeResumo } from './painel';
 import FinanceModule, { financeSummary, brl as brlFmt } from './financeiro';
 import {
   Briefcase,
@@ -419,6 +421,11 @@ export default function App() {
   const [documents, setDocuments] = useState<any[]>(() => readLocalValue('vm-documents', []));
   const [documentDraft, setDocumentDraft] = useState({ title: '', client: '', process: '', category: 'Contrato de honorários', fileName: '', dataUrl: '', size: 0 });
   const [officeSettings, setOfficeSettings] = useState<any>(() => readLocalValue('vm-office-settings', { officeName: 'Valeska Monteiro Advocacia', oab: 'OAB/ES 41.715', email: 'contato@valeskamonteiro.adv.br', phone: '(27) 99752-5314', address: 'Serra / ES', lgpdConsent: false, lgpdAcceptedAt: '' }));
+  const team = teamOf(officeSettings);
+  const [meChoice, setMeChoice] = useState<string>(() => { try { return localStorage.getItem('vm-me') || ''; } catch { return ''; } });
+  const [dashView, setDashView] = useState<'meu' | 'escritorio'>('meu');
+  const me = memberByEmail(team, session?.user?.email) || team.find(m => m.id === meChoice) || null;
+  const chooseMe = (id: string) => { setMeChoice(id); try { localStorage.setItem('vm-me', id); } catch { /* sem armazenamento */ } };
   const [moduleNotice, setModuleNotice] = useState('');
 
   // Parcelas e despesas pendentes vencidas passam sozinhas para "Atrasado".
@@ -546,7 +553,8 @@ export default function App() {
     value: '',
     honorarios: '',
     descontos: '',
-    status: 'Em andamento'
+    status: 'Em andamento',
+    responsible: 'valeska'
   });
 
   const [newClient, setNewClient] = useState({
@@ -564,7 +572,8 @@ export default function App() {
     process: '',
     dueDate: todayISO(),
     dueTime: '17:00',
-    type: 'FATAL'
+    type: 'FATAL',
+    responsible: ''
   });
 
   const [newTemplate, setNewTemplate] = useState({
@@ -1040,7 +1049,7 @@ export default function App() {
       descontos: Number(newProcess.descontos || 0)
     };
     setProcesses(prev => [item, ...prev]);
-    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento' });
+    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento', responsible: me?.id || 'valeska' });
     setIsNewProcessOpen(false);
   };
 
@@ -1058,7 +1067,7 @@ export default function App() {
     if (!newDeadline.title) return;
     const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
     setDeadlines(prev => [item, ...prev]);
-    setNewDeadline({ title: '', client: '', process: '', dueDate: todayISO(), dueTime: '17:00', type: 'FATAL' });
+    setNewDeadline({ title: '', client: '', process: '', dueDate: todayISO(), dueTime: '17:00', type: 'FATAL', responsible: '' });
     setIsNewDeadlineOpen(false);
   };
 
@@ -1127,8 +1136,8 @@ export default function App() {
       status: 'A fazer',
       priority: 'Média',
       dueDate: '',
-      createdBy: 'Dra. Valeska',
-      assignee: 'Dra. Valeska',
+      createdBy: me?.name || 'Dra. Valeska',
+      assignee: me?.name || 'Dra. Valeska',
       process: '',
       estimatedTime: '',
       checklist: [],
@@ -2324,9 +2333,33 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             </div>
           )}
           {moduleNotice && ['leads', 'finances', 'documents', 'settings'].includes(activeTab) && <div role="status" className="mb-4 p-3 rounded-xl border text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.valoresReceber }}>{moduleNotice}</div>}
-          {/* TAB 1: DASHBOARD EXECUTIVO — layout inspirado no painel de referência */}
           {activeTab === 'dashboard' && (
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4" role="tablist" aria-label="Tipo de painel">
+              <div className="flex gap-2">
+                {([['meu', me ? `Meu painel · ${me.short}` : 'Meu painel'], ['escritorio', 'Painel do escritório']] as const).map(([k, label]) => (
+                  <button key={k} type="button" role="tab" aria-selected={dashView === k} onClick={() => setDashView(k)} className="px-4 py-2 rounded-full text-xs font-bold border transition" style={{ backgroundColor: dashView === k ? PALETTE.bordoPrincipal : 'transparent', color: dashView === k ? '#FFFFFF' : PALETTE.textoPrincipal, borderColor: dashView === k ? PALETTE.bordoPrincipal : PALETTE.linhasBordas }}>{label}</button>
+                ))}
+              </div>
+              {me && <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>Entrou como <strong>{me.name}</strong>{!memberByEmail(team, session?.user?.email) && <> · <button type="button" onClick={() => chooseMe('')} className="underline">trocar</button></>}</p>}
+            </div>
+          )}
+
+          {activeTab === 'dashboard' && dashView === 'meu' && !me && (
+            <div className="rounded-2xl border p-6 space-y-3 max-w-xl" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              <h3 className="font-serif font-bold text-lg">Quem está usando o sistema?</h3>
+              <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Não reconheci o seu e-mail de login. Escolha seu nome para ver o seu painel. Para o sistema reconhecer sozinho nas próximas vezes, cadastre o seu e-mail em Configurações, na parte Equipe.</p>
+              <div className="flex gap-2">{team.map(m => <button key={m.id} type="button" onClick={() => chooseMe(m.id)} className="px-4 py-2 rounded-xl text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>{m.name}</button>)}</div>
+            </div>
+          )}
+
+          {activeTab === 'dashboard' && dashView === 'meu' && me && (
+            <MeuPainel PALETTE={PALETTE} me={me} team={team} processes={processes} deadlines={deadlines} tasks={tasks} processMovements={processMovements} drafts={Array.isArray(clientMessageDrafts) ? clientMessageDrafts : []} inactivityLimitDays={INACTIVITY_LIMIT_DAYS} dateLabel={dashboardDateLabel} onGo={(tab) => { setActiveTab(tab); setModuleNotice(''); if (tab === 'agenda') setAgendaSubTab('prazos'); }} />
+          )}
+
+          {/* TAB 1: DASHBOARD EXECUTIVO — layout inspirado no painel de referência */}
+          {activeTab === 'dashboard' && dashView === 'escritorio' && (
             <div className="space-y-4 md:space-y-5" style={{ color: PALETTE.textoPrincipal }}>
+              <EquipeResumo PALETTE={PALETTE} team={team} processes={processes} deadlines={deadlines} tasks={tasks} />
               {/* Título e ações rápidas */}
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
@@ -2757,7 +2790,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                           <Trash2 size={13} className="text-amber-700" />
                         </button>
                       </div>
-                      <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{proc.client}</h4>
+                      <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{proc.client}<span className="ml-2 align-middle px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: `${PALETTE.dourado}30`, color: PALETTE.bordoEscuro }}>{(() => { const r = processResponsible(proc); return r === 'ambas' ? 'Ambas' : (team.find(m => m.id === r)?.short || 'Valeska'); })()}</span></h4>
                       <p className="text-xs" style={{ color: PALETTE.textoApoio }}>{proc.action} • {proc.court}</p>
                     </div>
 
@@ -3249,6 +3282,10 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Dados do escritório</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {[{ key: 'officeName', label: 'Nome do escritório' }, { key: 'oab', label: 'OAB' }, { key: 'email', label: 'E-mail' }, { key: 'phone', label: 'Telefone' }, { key: 'address', label: 'Endereço / comarca' }].map(field => <label key={field.key} className="text-xs font-semibold space-y-1" style={{ color: PALETTE.textoPrincipal }}><span>{field.label}</span><input value={officeSettings[field.key] || ''} onChange={e => setOfficeSettings(prev => ({ ...prev, [field.key]: e.target.value }))} className="w-full p-2.5 border rounded-lg font-normal" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} /></label>)}
+                </div>
+                <div className="p-4 rounded-xl border space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <div><h4 className="font-serif font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Equipe</h4><p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>E-mails usados no login de cada advogada. É assim que o sistema mostra o "Meu painel" certo. Separe vários e-mails com vírgula.</p></div>
+                  {team.map(m => <label key={m.id} className="text-xs font-semibold space-y-1 block" style={{ color: PALETTE.textoPrincipal }}><span>{m.name}</span><input defaultValue={m.emails.join(', ')} onBlur={e => { const emails = e.target.value.split(',').map(x => x.trim().toLowerCase()).filter(Boolean); setOfficeSettings(prev => ({ ...prev, team: team.map(x => ({ id: x.id, emails: x.id === m.id ? emails : x.emails })) })); }} className="w-full p-2.5 border rounded-lg font-normal" style={{ backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }} placeholder="email@exemplo.com" /></label>)}
                 </div>
                 <label className="flex items-start gap-3 p-3 rounded-xl border text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><input type="checkbox" checked={Boolean(officeSettings.lgpdConsent)} onChange={e => setOfficeSettings(prev => ({ ...prev, lgpdConsent: e.target.checked, lgpdAcceptedAt: e.target.checked ? new Date().toISOString() : '' }))} /><span><strong>Registro de ciência do aviso de privacidade e tratamento de dados.</strong><br/>Este controle interno registra a ciência no navegador; não substitui o aviso de privacidade, base legal, contrato de operador ou demais medidas exigidas pela LGPD.</span></label>
                 <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={toggleTheme} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>{isDarkMode ? <Sun size={13}/> : <Moon size={13}/>} Alternar tema</button><button type="submit" className="px-4 py-2 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar configurações</button></div>
@@ -5268,6 +5305,12 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                   <input type="number" value={newProcess.descontos} onChange={(e) => setNewProcess({ ...newProcess, descontos: e.target.value })} className="w-full p-2.5 border rounded-lg" placeholder="500" />
                 </div>
               </div>
+              <div>
+                <label className="font-bold block mb-1">Responsável</label>
+                <select value={newProcess.responsible} onChange={(e) => setNewProcess({ ...newProcess, responsible: e.target.value })} className="w-full p-2.5 border rounded-lg bg-white">
+                  {RESPONSIBLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
 
               <div className="pt-3 flex justify-end gap-2">
                 <button type="button" onClick={() => setIsNewProcessOpen(false)} className="px-4 py-2 rounded-lg border font-bold">Cancelar</button>
@@ -5333,6 +5376,14 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                   <input type={inputType || 'text'} value={editingItem.data[field] ?? ''} onChange={e => setEditingItem(prev => ({ ...prev, data: { ...prev.data, [field]: e.target.value } }))} className="w-full p-2.5 border rounded-lg"/>
                 </div>
               ))}
+              {editingItem.type === 'process' && (
+                <div>
+                  <label className="font-bold block mb-1">Responsável</label>
+                  <select value={processResponsible(editingItem.data)} onChange={e => setEditingItem(prev => ({ ...prev, data: { ...prev.data, responsible: e.target.value } }))} className="w-full p-2.5 border rounded-lg bg-white">
+                    {RESPONSIBLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="pt-3 flex justify-end gap-2">
                 <button onClick={() => setEditingItem(null)} className="px-4 py-2 rounded-lg border font-bold">Cancelar</button>
                 <button onClick={saveEditedItem} className="px-4 py-2 rounded-lg text-white font-bold" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar Alterações</button>
@@ -5375,6 +5426,13 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                   <label className="font-bold block mb-1">Horário</label>
                   <input type="time" value={newDeadline.dueTime} onChange={(e) => setNewDeadline({ ...newDeadline, dueTime: e.target.value })} className="w-full p-2.5 border rounded-lg" />
                 </div>
+              </div>
+              <div>
+                <label className="font-bold block mb-1">Responsável</label>
+                <select value={newDeadline.responsible} onChange={(e) => setNewDeadline({ ...newDeadline, responsible: e.target.value })} className="w-full p-2.5 border rounded-lg bg-white">
+                  <option value="">Mesmo do processo (ou Dra. Valeska)</option>
+                  {RESPONSIBLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
               <div>
                 <label className="font-bold block mb-1">Urgência</label>
@@ -5500,6 +5558,18 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
               </div>
 
               <div>
+                <label className="font-bold block mb-1">Responsável</label>
+                <select
+                  value={selectedDeadlineModal.responsible || ''}
+                  onChange={(e) => setSelectedDeadlineModal({ ...selectedDeadlineModal, responsible: e.target.value })}
+                  className="w-full p-2.5 border rounded-lg bg-white"
+                >
+                  <option value="">Mesmo do processo (ou Dra. Valeska)</option>
+                  {RESPONSIBLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+
+              <div>
                 <label className="font-bold block mb-1">Tipo / Urgência</label>
                 <select
                   value={selectedDeadlineModal.type}
@@ -5581,12 +5651,13 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-xl border">
                 <div>
                   <label className="font-bold block text-[10px] uppercase text-slate-500 mb-1">Pessoa Responsável</label>
-                  <input
-                    type="text"
+                  <select
                     value={selectedTaskModal.assignee || 'Dra. Valeska'}
                     onChange={e => setSelectedTaskModal({ ...selectedTaskModal, assignee: e.target.value })}
                     className="w-full p-2 border rounded-lg bg-white"
-                  />
+                  >
+                    {[...new Set(['Dra. Valeska', 'Dra. Dayane', 'Ambas', 'Secretaria / Apoio', selectedTaskModal.assignee].filter(Boolean))].map((n: any) => <option key={n} value={n}>{n}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="font-bold block text-[10px] uppercase text-slate-500 mb-1">Criado Por (Autor)</label>
