@@ -1960,8 +1960,9 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               {isResetMode ? <KeyRound size={28} style={{ color: '#FFFFFF' }} /> : <Lock size={28} style={{ color: '#FFFFFF' }} />}
             </div>
             <h1 className="font-serif font-bold text-2xl tracking-wide uppercase" style={{ color: PALETTE.bordoPrincipal }}>
-              DRA. VALESKA MONTEIRO
+              VALESKA MONTEIRO
             </h1>
+            <p className="text-[11px] tracking-widest uppercase -mt-1" style={{ color: PALETTE.textoApoio }}>Advocacia e Consultoria Jurídica</p>
             <p className="text-xs tracking-wider" style={{ color: PALETTE.textoApoio }}>
               {isResetMode ? 'Recuperação de Senha de Acesso' : 'Advocacia & Consultoria Jurídica • Acesso Restrito'}
             </p>
@@ -2143,9 +2144,12 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               </span>
             </div>
             {!isSidebarCollapsed && (
-              <h1 className="font-serif font-bold text-sm tracking-widest uppercase mt-1" style={{ color: MENU_PALETTE.destaque }}>
-                DRA. VALESKA MONTEIRO
-              </h1>
+              <div className="mt-1 text-center">
+                <h1 className="font-serif font-bold text-sm tracking-widest uppercase" style={{ color: MENU_PALETTE.destaque }}>
+                  VALESKA MONTEIRO
+                </h1>
+                <p className="text-[10px] tracking-wide mt-0.5" style={{ color: MENU_PALETTE.subtitulo }}>Advocacia e Consultoria Jurídica</p>
+              </div>
             )}
           </div>
 
