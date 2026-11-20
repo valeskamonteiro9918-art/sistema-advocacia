@@ -7,6 +7,7 @@ import { mergeDefaultTemplates, rememberRemovedDefault } from './defaultTemplate
 import { downloadDocx, textToParagraphs } from './docx';
 import { teamOf, memberByEmail, RESPONSIBLE_OPTIONS, processResponsible } from './equipe';
 import MeuPainel, { EquipeResumo } from './painel';
+import PrazosView from './prazosView';
 import FinanceModule, { financeSummary, brl as brlFmt } from './financeiro';
 import {
   Briefcase,
@@ -2320,7 +2321,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
         <div className="p-6 flex-1 overflow-y-auto">
           {activeTab === 'agenda' && (
             <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              {[{ id: 'prazos', label: 'Prazos e intimações' }, { id: 'agenda', label: 'Agenda' }, { id: 'varredura', label: scannedPush.some((s: any) => scanStatusOf(s) === 'pendente') ? `Varredura e sincronização (${scannedPush.filter((s: any) => scanStatusOf(s) === 'pendente').length})` : 'Varredura e sincronização' }].map(item => (
+              {[{ id: 'prazos', label: 'Prazos' }, { id: 'agenda', label: 'Agenda' }, { id: 'varredura', label: scannedPush.some((s: any) => scanStatusOf(s) === 'pendente') ? `Intimações do Gmail (${scannedPush.filter((s: any) => scanStatusOf(s) === 'pendente').length})` : 'Intimações do Gmail' }].map(item => (
                 <button key={item.id} onClick={() => setAgendaSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: agendaSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: agendaSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
                   {item.label}
                 </button>
@@ -2559,32 +2560,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
           {/* SUBABA: PRAZOS E INTIMAÇÕES */}
           {activeTab === 'agenda' && agendaSubTab === 'prazos' && (
-            <div className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
-                <div>
-                  <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Prazos e intimações</h3>
-                  <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Acompanhe vencimentos, urgências e situação de cada compromisso.</p>
-                </div>
-                <button onClick={() => setIsNewDeadlineOpen(true)} className="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-2 w-fit" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Plus size={14}/> Cadastrar prazo</button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[{ label: 'Em aberto', value: deadlines.filter(d => d.status !== 'Finalizado').length }, { label: 'Fatais em aberto', value: deadlines.filter(d => d.type === 'FATAL' && d.status !== 'Finalizado').length }, { label: 'Vencidos', value: deadlines.filter(d => d.status !== 'Finalizado' && d.dueDate < new Date().toISOString().slice(0,10)).length }].map(kpi => <div key={kpi.label} className="rounded-xl border p-3" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}><p className="text-[10px] uppercase tracking-wide font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-1" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
-              </div>
-              <div className="space-y-3">
-                {[...deadlines].sort((a,b) => String(a.dueDate).localeCompare(String(b.dueDate))).map(item => { const businessDays = estimateBusinessDaysUntil(item.dueDate); const overdue = item.status !== 'Finalizado' && item.dueDate < new Date().toISOString().slice(0,10); return (
-                  <button key={item.id} type="button" onClick={() => setSelectedDeadlineModal({ ...item })} className="w-full text-left p-4 rounded-xl border flex flex-col md:flex-row md:items-center md:justify-between gap-3 transition hover:shadow-sm" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: overdue ? PALETTE.descontos : PALETTE.linhasBordas }}>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap gap-2 items-center"><span className="text-[9px] uppercase font-bold px-2 py-1 rounded-full" style={{ backgroundColor: item.type === 'FATAL' ? `${PALETTE.descontos}22` : `${PALETTE.dourado}22`, color: item.type === 'FATAL' ? PALETTE.descontos : PALETTE.dourado }}>{item.type === 'FATAL' ? 'Prazo fatal' : 'Compromisso'}</span><span className="text-[10px] font-semibold" style={{ color: PALETTE.textoApoio }}>{item.dueDate} • {item.dueTime || 'Sem horário'}</span></div>
-                      <h4 className="font-bold text-sm mt-2" style={{ color: PALETTE.textoPrincipal }}>{item.title}</h4>
-                      <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{item.client || 'Cliente não vinculado'} · Processo: {item.process || 'Não informado'} · {item.court || 'Foro não informado'}</p>
-                    </div>
-                    <div className="flex md:flex-col md:items-end gap-2 shrink-0"><span className="text-[10px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: item.completed ? '#D1FAE5' : overdue ? '#FEF3C7' : `${PALETTE.valoresReceber}18`, color: item.completed ? '#065F46' : overdue ? '#92400E' : PALETTE.valoresReceber }}>{item.status || 'Pendente'}</span><span className="text-[10px] font-semibold" style={{ color: overdue ? PALETTE.descontos : PALETTE.textoApoio }}>{item.completed ? 'Cumprido' : overdue ? 'Vencido' : businessDays === 0 ? 'Vence hoje' : businessDays === 1 ? '1 dia útil estimado' : `${businessDays} dias úteis estimados`}</span></div>
-                  </button>
-                ); })}
-                {deadlines.length === 0 && <p className="text-center p-8 text-sm" style={{ color: PALETTE.textoApoio }}>Nenhum prazo cadastrado.</p>}
-              </div>
-              <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>A estimativa conta apenas dias úteis, desconta feriados nacionais, Carnaval, Paixão de Cristo, Corpus Christi, Nossa Senhora da Penha (ES) e o recesso forense de 20/12 a 20/01. Feriados municipais e suspensões específicas do tribunal não estão incluídos. Confirme sempre a contagem do prazo no sistema oficial aplicável.</p>
-            </div>
+            <PrazosView PALETTE={PALETTE} deadlines={deadlines} processes={processes} team={team} me={me} businessDaysUntil={estimateBusinessDaysUntil} onOpen={(item: any) => setSelectedDeadlineModal(item)} onNew={() => setIsNewDeadlineOpen(true)} />
           )}
 
           {/* TAB: VARREDURA, agora dentro de Prazos e Agenda */}
@@ -2593,7 +2569,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
                   <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>
-                    Varredura Eletrônica & Notificações Push
+                    Intimações e publicações do Gmail
                   </h3>
                   <p className="text-xs" style={{ color: PALETTE.textoApoio }}>
                     Seu Gmail é verificado automaticamente a cada 30 minutos. Publicações ficam para sua análise; nenhum prazo é confirmado ou lançado automaticamente.
