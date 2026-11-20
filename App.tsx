@@ -1863,6 +1863,9 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     if (!melhor) return null;
     return { ...melhor, dias: Math.floor((inactivityToday.getTime() - melhor.d.getTime()) / 86400000) };
   };
+  const renderDraftCard = (draft: any) => (
+<div key={draft.id} className="p-3 rounded-lg border space-y-2" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{draft.client} · {draft.process}</strong><span className="text-[10px] font-semibold" style={{ color: PALETTE.dourado }}>{draft.status}</span></div><p className="text-xs whitespace-pre-wrap" style={{ color: PALETTE.textoApoio }}>{draft.message}</p><div className="flex flex-wrap gap-2"><button onClick={() => { const revised = window.prompt('Revise ou edite a mensagem. Nada será enviado automaticamente:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Revisada por você' } : x)); }} className="px-3 py-1.5 rounded-lg border text-xs font-bold" style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>Revisar mensagem</button><button onClick={() => { const revised = window.prompt('Confira o texto final. Para abrir o WhatsApp, confirme o texto abaixo:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Aprovada para envio manual' } : x)); const phone = String(draft.phone || '').replace(/\D/g, ''); if (phone) window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#166534' }}>Abrir WhatsApp após revisar</button></div></div>
+  );
   const processArea = (p: any) => {
     const txt = `${p.action || ''} ${p.court || ''}`;
     if (/trabalh|reclama|horas extras|\bTRT\b/i.test(txt)) return 'Trabalhista';
@@ -2766,10 +2769,12 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                       .slice()
                       .sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
                     const ult = lastMovementOf(proc);
+                    const drafts = clientMessageDrafts.filter((d: any) => onlyDigits(d.process) === onlyDigits(proc.number));
+                    const aguardando = drafts.filter((d: any) => d.status === 'Aguardando sua revisão').length;
                     return (
                       <>
                         <button type="button" aria-expanded={aberto} onClick={() => setOpenProcessId(aberto ? null : proc.id)} className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-bold hover:bg-black/5 transition" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.bordoPrincipal }}>
-                          <span>{aberto ? 'Fechar processo' : 'Abrir processo'}<span className="font-normal ml-2" style={{ color: ult && ult.dias >= INACTIVITY_LIMIT_DAYS ? '#9A3412' : PALETTE.textoApoio }}>{movs.length} movimentaç{movs.length === 1 ? 'ão' : 'ões'}{ult ? ` · última em ${ult.d.toLocaleDateString('pt-BR')}` : ''}</span></span>
+                          <span>{aberto ? 'Fechar processo' : 'Abrir processo'}<span className="font-normal ml-2" style={{ color: ult && ult.dias >= INACTIVITY_LIMIT_DAYS ? '#9A3412' : PALETTE.textoApoio }}>{movs.length} movimentaç{movs.length === 1 ? 'ão' : 'ões'}{ult ? ` · última em ${ult.d.toLocaleDateString('pt-BR')}` : ''}</span>{aguardando > 0 && <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>{aguardando} mensagem{aguardando === 1 ? '' : 'ns'} para revisar</span>}</span>
                           {aberto ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                         </button>
                         {aberto && (
@@ -2787,6 +2792,13 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                                 {mov.description && <p className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.description}</p>}
                               </div>
                             ))}
+                            {drafts.length > 0 && (
+                              <div className="space-y-2 pt-2">
+                                <h5 className="font-serif font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Mensagem para o cliente</h5>
+                                <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>O sistema prepara o texto quando chega uma movimentação. Nada é enviado: você revisa e decide se abre o WhatsApp.</p>
+                                {drafts.map((d: any) => renderDraftCard(d))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </>
@@ -2796,11 +2808,6 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   </React.Fragment>
                 ))}
               </div>
-
-              <section className="rounded-xl border p-4 space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
-                <div><h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Mensagens preparadas para sua revisão</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>O sistema apenas prepara o texto. Nada é enviado. Você revisa, altera e decide se deseja abrir o WhatsApp.</p></div>
-                {clientMessageDrafts.length === 0 ? <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Nenhuma mensagem preparada.</p> : clientMessageDrafts.slice(0, 20).map((draft: any) => <div key={draft.id} className="p-3 rounded-lg border space-y-2" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{draft.client} · {draft.process}</strong><span className="text-[10px] font-semibold" style={{ color: PALETTE.dourado }}>{draft.status}</span></div><p className="text-xs whitespace-pre-wrap" style={{ color: PALETTE.textoApoio }}>{draft.message}</p><div className="flex flex-wrap gap-2"><button onClick={() => { const revised = window.prompt('Revise ou edite a mensagem. Nada será enviado automaticamente:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Revisada por você' } : x)); }} className="px-3 py-1.5 rounded-lg border text-xs font-bold" style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>Revisar mensagem</button><button onClick={() => { const revised = window.prompt('Confira o texto final. Para abrir o WhatsApp, confirme o texto abaixo:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Aprovada para envio manual' } : x)); const phone = String(draft.phone || '').replace(/\D/g, ''); if (phone) window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#166534' }}>Abrir WhatsApp após revisar</button></div></div>)}
-              </section>
             </div>
           )}
 
