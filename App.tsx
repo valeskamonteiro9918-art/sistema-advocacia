@@ -427,7 +427,7 @@ export default function App() {
 
   // --- CÓDIGO ORIGINAL INTACTO ---
   // Ao atualizar a página (F5), continua na mesma tela. O Dashboard só abre no primeiro acesso da sessão.
-  const NAV_TABS = ['dashboard', 'processes', 'agenda', 'tasks', 'crm', 'leads', 'finances', 'documents', 'workspace', 'reports', 'settings'];
+  const NAV_TABS = ['dashboard', 'processes', 'agenda', 'tasks', 'crm', 'leads', 'finances', 'documents', 'workspace', 'settings'];
   const readNav = (key: string, fallback: string, allowed: string[]) => { try { const v = sessionStorage.getItem(key); return v && allowed.includes(v) ? v : fallback; } catch { return fallback; } };
   const [activeTab, setActiveTab] = useState(() => readNav('vm-nav-tab', 'dashboard', NAV_TABS));
   useEffect(() => { try { sessionStorage.setItem('vm-nav-tab', activeTab); } catch { /* sem armazenamento */ } }, [activeTab]);
@@ -2216,8 +2216,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               { id: 'crm', label: 'Clientes', icon: Users },
               { id: 'finances', label: 'Financeiro', icon: Wallet },
               { id: 'documents', label: 'Documentos', icon: FolderOpen },
-              { id: 'workspace', label: 'Calculadoras', icon: Calculator },
-              { id: 'reports', label: 'Relatórios', icon: BarChart3 }
+              { id: 'workspace', label: 'Calculadoras', icon: Calculator }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id || (tab.id === 'crm' && activeTab === 'leads');
@@ -2612,6 +2611,17 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                     <button type="button" onClick={() => { setActiveTab('agenda'); setAgendaSubTab('varredura'); }} className="mt-3 text-[10px] font-semibold hover:underline" style={{ color: PALETTE.bordoPrincipal }}>Ver varredura e notificações</button>
                   </section>
                 </div>
+              </div>
+              <div className="space-y-5 pt-2">
+              <div><h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Números do escritório</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Contatos, clientes e financeiro em um só lugar.</p></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Contratos fechados', value: leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length }, { label: 'Contatos que viraram clientes', value: `${leads.length ? Math.round(leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Resumo financeiro por status</h4>{['Recebido','Pendente','Atrasado','Pago'].map(status => { const amount = financialEntries.filter(e => e.status === status).reduce((sum,e) => sum + Number(e.amount || 0), 0); return <div key={status} className="flex justify-between py-2 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{status}</span><strong>R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></div>; })}</section>
+              </div>
+              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Contatos por origem e motivos de perda</h4><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div>{['Indicação','WhatsApp','Instagram','Site','Google','Outro'].map(o => <div key={o} className="flex justify-between py-1.5 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{o}</span><strong>{leads.filter((l: any) => l.source === o).length}</strong></div>)}</div><div>{LOST_REASONS.map(r => <div key={r} className="flex justify-between py-1.5 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{r}</span><strong>{leads.filter((l: any) => l.stage === 'Perdido' && l.lostReason === r).length}</strong></div>)}</div></div></section>
+              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Funil de captação</h4>{FUNNEL_STAGES.map(stage => <div key={stage} className="flex items-center gap-3"><span className="w-36 text-xs" style={{ color: PALETTE.textoPrincipal }}>{stage}</span><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${leads.length ? leads.filter(l => l.stage === stage).length / leads.length * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div><strong className="w-6 text-right text-xs" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(l => l.stage === stage).length}</strong></div>)}</section>
               </div>
               <p className="text-[9px] text-right" style={{ color: PALETTE.textoApoio }}>Indicadores calculados a partir dos dados cadastrados neste sistema.</p>
             </div>
@@ -3323,22 +3333,6 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 {documents.length === 0 && <p className="p-8 text-center rounded-xl border text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Nenhum documento cadastrado.</p>}
               </section>
               <p className="text-[10px] p-3 rounded-lg" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>Atenção: os arquivos ficam guardados só neste aparelho, e não aparecem em outros computadores ou no celular. Para documentos sigilosos ou que você precise ver em mais de um lugar, guarde também no Drive do escritório.</p>
-            </div>
-          )}
-
-          {/* MÓDULO: RELATÓRIOS */}
-          {activeTab === 'reports' && (
-            <div className="space-y-5">
-              <div><h3 className="font-serif font-bold text-xl" style={{ color: PALETTE.textoPrincipal }}>Relatórios gerenciais</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Indicadores calculados a partir dos registros disponíveis no sistema.</p></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Contratos fechados', value: leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length }, { label: 'Contatos que viraram clientes', value: `${leads.length ? Math.round(leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Processos por área</h4>{dashboardAreaData.map(row => <div key={row.label} className="space-y-1"><div className="flex justify-between text-xs" style={{ color: PALETTE.textoPrincipal }}><span>{row.label}</span><strong>{row.count}</strong></div><div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${processes.length ? row.count / Math.max(1, processes.length) * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div></div>)}</section>
-                <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Resumo financeiro por status</h4>{['Recebido','Pendente','Atrasado','Pago'].map(status => { const amount = financialEntries.filter(e => e.status === status).reduce((sum,e) => sum + Number(e.amount || 0), 0); return <div key={status} className="flex justify-between py-2 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{status}</span><strong>R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></div>; })}</section>
-              </div>
-              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Contatos por origem e motivos de perda</h4><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div>{['Indicação','WhatsApp','Instagram','Site','Google','Outro'].map(o => <div key={o} className="flex justify-between py-1.5 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{o}</span><strong>{leads.filter((l: any) => l.source === o).length}</strong></div>)}</div><div>{LOST_REASONS.map(r => <div key={r} className="flex justify-between py-1.5 border-b text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><span>{r}</span><strong>{leads.filter((l: any) => l.stage === 'Perdido' && l.lostReason === r).length}</strong></div>)}</div></div></section>
-              <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Funil de captação</h4>{FUNNEL_STAGES.map(stage => <div key={stage} className="flex items-center gap-3"><span className="w-36 text-xs" style={{ color: PALETTE.textoPrincipal }}>{stage}</span><div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${leads.length ? leads.filter(l => l.stage === stage).length / leads.length * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div><strong className="w-6 text-right text-xs" style={{ color: PALETTE.textoPrincipal }}>{leads.filter(l => l.stage === stage).length}</strong></div>)}</section>
             </div>
           )}
 
