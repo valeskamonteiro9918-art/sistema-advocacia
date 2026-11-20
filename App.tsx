@@ -9,6 +9,7 @@ import { teamOf, memberByEmail, RESPONSIBLE_OPTIONS, processResponsible } from '
 import MeuPainel, { EquipeResumo } from './painel';
 import PrazosView from './prazosView';
 import MessageComposer, { MsgOption } from './mensagens';
+import ClientFinanceModal from './financeiroCliente';
 import FinanceModule, { financeSummary, brl as brlFmt } from './financeiro';
 import {
   Briefcase,
@@ -1264,6 +1265,7 @@ export default function App() {
     setLeads(prev => prev.map((x: any) => x.id === id ? { ...x, docs: { ...(x.docs || {}), [item]: !x.docs?.[item] } } : x));
   };
 
+  const [clientFinance, setClientFinance] = useState<null | { name: string; phone?: string }>(null);
   const [composer, setComposer] = useState<null | { name: string; phone: string; subtitle?: string; options: MsgOption[] }>(null);
   const openLeadComposer = (lead: any) => {
     setComposer({
@@ -1325,7 +1327,7 @@ export default function App() {
     if (!clients.some((c: any) => String(c.name).trim().toLowerCase() === String(lead.name).trim().toLowerCase())) {
       setClients(prev => [{ id: `cli-${Date.now()}`, name: lead.name, type: 'Pessoa Física', document: '', phone: lead.phone || '', email: lead.email || '', status: 'Ativo' }, ...prev]);
     }
-    promptInstallments(lead.name);
+    setClientFinance({ name: lead.name, phone: lead.phone || '' });
     const stamp = Date.now();
     setTasks(prev => [{
       id: `t-${stamp}`, title: `Abrir caso: ${lead.name} (${lead.caseType || 'Família'})`, description: 'Checklist de abertura do caso. Cadastre o processo na aba Processos depois do protocolo.',
@@ -1333,7 +1335,7 @@ export default function App() {
       checklist: OPENING_CHECKLIST.map((text, i) => ({ id: `c-${stamp}-${i}`, text, completed: false })), attachments: [], comments: []
     }, ...prev]);
     setLeads(prev => prev.map((x: any) => x.id === lead.id ? { ...x, stage: 'Contratado', stageSince: new Date().toISOString() } : x));
-    setModuleNotice('Cliente criado e tarefa de abertura gerada. Cadastre o processo quando houver número.');
+    setModuleNotice('Cliente criado e tarefa de abertura gerada. Defina o plano de pagamento e cadastre o processo quando houver número.');
     setActiveTab('crm');
   };
 
@@ -2905,6 +2907,8 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                     <div className="pt-2 border-t flex justify-between items-center text-xs" style={{ borderColor: PALETTE.linhasBordas }}>
                       <span style={{ color: PALETTE.textoApoio }}>{cli.email}</span>
                       
+                      <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => setClientFinance({ name: cli.name, phone: cli.phone })} className="px-3 py-1.5 rounded-lg font-bold border flex items-center gap-1.5 transition hover:bg-black/5" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><Wallet size={14} /> Financeiro</button>
                       <button
                         type="button"
                         onClick={() => openClientComposer(cli)}
@@ -2912,6 +2916,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                       >
                         <MessageCircle size={14} /> Mensagem
                       </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -3315,7 +3320,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
           {/* TAB: FINANCEIRO */}
           {activeTab === 'finances' && (
-            <FinanceModule PALETTE={PALETTE} entries={financialEntries} setEntries={setFinancialEntries} processes={processes} clients={clients} officeSettings={officeSettings} notify={setModuleNotice} promptInstallments={promptInstallments} />
+            <FinanceModule PALETTE={PALETTE} entries={financialEntries} setEntries={setFinancialEntries} processes={processes} clients={clients} officeSettings={officeSettings} notify={setModuleNotice} promptInstallments={promptInstallments} openClientFinance={(n: string) => setClientFinance({ name: n })} />
           )}
 
           {/* TAB: TAREFAS - QUADRO DINÂMICO */}
@@ -5638,6 +5643,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
         </div>
       )}
 
+      {clientFinance && <ClientFinanceModal PALETTE={PALETTE} client={clientFinance} entries={financialEntries} setEntries={setFinancialEntries} notify={setModuleNotice} onClose={() => setClientFinance(null)} />}
       {composer && <MessageComposer PALETTE={PALETTE} name={composer.name} phone={composer.phone} subtitle={composer.subtitle} options={composer.options} onClose={() => setComposer(null)} />}
 
       {/* MODAL DETALHADO DE EDIÇÃO DA TAREFA  */}
