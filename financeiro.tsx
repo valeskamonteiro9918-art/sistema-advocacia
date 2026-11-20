@@ -118,8 +118,8 @@ type Props = {
 };
 
 export default function FinanceModule({ PALETTE, entries, setEntries, processes, clients, officeSettings, notify, promptInstallments }: Props) {
-  const [tab, setTab] = useState<'resumo' | 'lancamentos' | 'mais'>('resumo');
-  const [adv, setAdv] = useState<null | 'honorarios' | 'custas' | 'alvaras' | 'relatorios'>(null);
+  const [tab, setTab] = useState<'resumo' | 'lancamentos' | 'relatorios' | 'mais'>('resumo');
+  const [adv, setAdv] = useState<null | 'honorarios' | 'custas' | 'alvaras'>(null);
   const [isEntryOpen, setIsEntryOpen] = useState(false);
   const today = todayLocal();
 
@@ -167,7 +167,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
     </div>
   );
 
-  const tabs: [typeof tab, string][] = [['resumo', 'Resumo'], ['lancamentos', 'Lançamentos'], ['mais', 'Mais ferramentas']];
+  const tabs: [typeof tab, string][] = [['resumo', 'Resumo'], ['lancamentos', 'Lançamentos'], ['relatorios', 'Relatórios'], ['mais', 'Mais ferramentas']];
 
   // ----------------------------- Visão geral -----------------------------
   const [draft, setDraft] = useState({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
@@ -357,8 +357,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
   const ADV_ITEMS: [NonNullable<typeof adv>, string, string][] = [
     ['honorarios', 'Honorários por processo', 'Contratual, de êxito e sucumbência de cada processo, com nota fiscal e boleto.'],
     ['custas', 'Custas e reembolsos', 'O que o escritório adiantou e precisa cobrar de volta do cliente.'],
-    ['alvaras', 'Alvarás e repasses', 'Alvará recebido, parte do escritório e repasse ao cliente.'],
-    ['relatorios', 'Relatórios', 'Resultado por mês, por cliente, extrato para enviar e previsão de entradas e saídas.']
+    ['alvaras', 'Alvarás e repasses', 'Alvará recebido, parte do escritório e repasse ao cliente.']
   ];
   const renderMais = () => adv === null ? (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -375,7 +374,6 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
       {adv === 'honorarios' && renderHonorarios()}
       {adv === 'custas' && renderCustas()}
       {adv === 'alvaras' && renderAlvaras()}
-      {adv === 'relatorios' && <>{renderFluxo()}{renderRelatorios()}</>}
     </div>
   );
 
@@ -824,6 +822,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
       </div>
       {tab === 'resumo' && renderResumo()}
       {tab === 'lancamentos' && renderLancamentos()}
+      {tab === 'relatorios' && <div className="space-y-5">{renderRelatorios()}{renderFluxo()}</div>}
       {tab === 'mais' && renderMais()}
       {renderEntryModal()}
     </div>
