@@ -1314,6 +1314,7 @@ export default function App() {
     }, ...prev]);
     setLeads(prev => prev.map((x: any) => x.id === lead.id ? { ...x, stage: 'Contratado', stageSince: new Date().toISOString() } : x));
     setModuleNotice('Cliente criado e tarefa de abertura gerada. Cadastre o processo quando houver número.');
+    setActiveTab('crm');
   };
 
   const handleAddFinancialEntry = (e) => {
@@ -1882,7 +1883,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     const assunto = ult ? `A última movimentação foi em ${ult.d.toLocaleDateString('pt-BR')}: ${String(ult.title).slice(0, 140)}.` : 'Seu processo segue em acompanhamento.';
     const message = `Olá, ${primeiro}! Passando para atualizar você sobre o processo nº ${proc.number}. ${assunto} Estamos acompanhando o andamento e, se houver alguma providência necessária, entrarei em contato. Qualquer dúvida, é só me chamar.`;
     setClientMessageDrafts((prev: any) => [{ id: `draft-manual-${Date.now()}`, process: proc.number, client: proc.client, phone: cliente?.phone || '', message, status: 'Aguardando sua revisão', createdAt: new Date().toISOString() }, ...(Array.isArray(prev) ? prev : [])]);
-    if (!cliente?.phone) window.alert('Este cliente está sem telefone cadastrado. O texto foi preparado, mas para abrir o WhatsApp cadastre o telefone em Clientes (CRM).');
+    if (!cliente?.phone) window.alert('Este cliente está sem telefone cadastrado. O texto foi preparado, mas para abrir o WhatsApp cadastre o telefone em Clientes.');
   };
   const processArea = (p: any) => {
     const txt = `${p.action || ''} ${p.court || ''}`;
@@ -2161,15 +2162,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               { id: 'processes', label: 'Processos', icon: FileText },
               { id: 'agenda', label: 'Prazos e Agenda', icon: CalendarIcon },
               { id: 'tasks', label: 'Tarefas', icon: ClipboardList },
-              { id: 'crm', label: 'Clientes (CRM)', icon: Users },
-              { id: 'leads', label: 'Captação', icon: UserPlus },
+              { id: 'crm', label: 'Clientes', icon: Users },
               { id: 'finances', label: 'Financeiro', icon: Wallet },
               { id: 'documents', label: 'Documentos', icon: FolderOpen },
               { id: 'workspace', label: 'Modelos e Calculadoras', icon: Copy },
               { id: 'reports', label: 'Relatórios', icon: BarChart3 }
             ].map((tab) => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+              const isActive = activeTab === tab.id || (tab.id === 'crm' && activeTab === 'leads');
               return (
                 <button
                   key={tab.id}
@@ -2328,6 +2328,15 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               ))}
             </div>
           )}
+          {(activeTab === 'crm' || activeTab === 'leads') && (
+            <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" role="tablist" aria-label="Clientes" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              {[{ id: 'crm', label: `Clientes ativos (${clients.length})` }, { id: 'leads', label: `Em captação (${leads.filter((l: any) => !CONVERTED_STAGES.includes(l.stage) && l.stage !== 'Perdido').length})` }].map(item => (
+                <button key={item.id} type="button" role="tab" aria-selected={activeTab === item.id} onClick={() => { setActiveTab(item.id); setModuleNotice(''); }} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: activeTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: activeTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
           {activeTab === 'workspace' && (
             <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               {[{ id: 'modelos', label: 'Modelos de peças' }, { id: 'calculadoras', label: 'Calculadoras jurídicas' }, { id: 'verbas', label: 'Apuração de verbas' }].map(item => (
@@ -2337,7 +2346,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               ))}
             </div>
           )}
-          {moduleNotice && ['leads', 'finances', 'documents', 'settings'].includes(activeTab) && <div role="status" className="mb-4 p-3 rounded-xl border text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.valoresReceber }}>{moduleNotice}</div>}
+          {moduleNotice && ['leads', 'crm', 'finances', 'documents', 'settings'].includes(activeTab) && <div role="status" className="mb-4 p-3 rounded-xl border text-xs" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.valoresReceber }}>{moduleNotice}</div>}
           {activeTab === 'dashboard' && (
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4" role="tablist" aria-label="Tipo de painel">
               <div className="flex gap-2">
