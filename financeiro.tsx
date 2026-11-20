@@ -118,7 +118,9 @@ type Props = {
 };
 
 export default function FinanceModule({ PALETTE, entries, setEntries, processes, clients, officeSettings, notify, promptInstallments }: Props) {
-  const [tab, setTab] = useState<'visao' | 'honorarios' | 'custas' | 'alvaras' | 'relatorios'>('visao');
+  const [tab, setTab] = useState<'resumo' | 'lancamentos' | 'mais'>('resumo');
+  const [adv, setAdv] = useState<null | 'honorarios' | 'custas' | 'alvaras' | 'relatorios'>(null);
+  const [isEntryOpen, setIsEntryOpen] = useState(false);
   const today = todayLocal();
 
   const input = 'p-2.5 border rounded-lg text-xs w-full';
@@ -165,9 +167,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
     </div>
   );
 
-  const tabs: [typeof tab, string][] = [
-    ['visao', 'Visão geral'], ['honorarios', 'Honorários'], ['custas', 'Custas e reembolsos'], ['alvaras', 'Alvarás e repasses'], ['relatorios', 'Relatórios']
-  ];
+  const tabs: [typeof tab, string][] = [['resumo', 'Resumo'], ['lancamentos', 'Lançamentos'], ['mais', 'Mais ferramentas']];
 
   // ----------------------------- Visão geral -----------------------------
   const [draft, setDraft] = useState({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
@@ -179,6 +179,7 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
     const done = draft.status === 'Recebido' || draft.status === 'Pago';
     add([{ ...draft, amount: Number(draft.amount), paidAt: done ? today : undefined }]);
     setDraft({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
+    setIsEntryOpen(false);
     notify('Lançamento financeiro cadastrado.');
   };
   const visibleEntries = entries
@@ -207,17 +208,9 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
     </div>
   );
 
-  const renderVisao = () => (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Kpi title="Saldo em conta" value={brl(summary.saldo)} sub="Recebido menos pago (sem valores de terceiros)" color={PALETTE.valoresReceber} />
-        <Kpi title="Projeção de caixa em 90 dias" value={brl(flow.projetado90)} sub={`Saldo atual + entradas e saídas previstas`} />
-        <Kpi title="Taxa de inadimplência" value={`${summary.inadimplenciaPct}%`} sub={`${brl(summary.inadimplenciaValor)} em atraso (${summary.inadimplenciaQtd} lançamento${summary.inadimplenciaQtd === 1 ? '' : 's'}) sobre ${brl(summary.baseVencida)} já vencidos`} color={PALETTE.descontos} />
-        <Kpi title="Honorários a receber" value={brl(summary.aReceber)} sub={`${brl(summary.aReceberVencido)} vencidos · ${brl(summary.aReceberAVencer)} a vencer`} color={PALETTE.valoresReceber} />
-      </div>
-
+  const renderFluxo = () => (
       <section className={card} style={cardStyle}>
-        <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Fluxo de caixa projetado (30/60/90 dias)</h4>
+        <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Entradas e saídas previstas (30, 60 e 90 dias)</h4>
         <div className="overflow-x-auto">
           <table className="w-full text-xs" style={{ color: PALETTE.textoPrincipal }}>
             <thead><tr style={{ color: PALETTE.textoApoio }} className="text-left text-[10px] uppercase tracking-wider"><th className="py-2 pr-3">Período</th><th className="py-2 pr-3 text-right">Entradas previstas</th><th className="py-2 pr-3 text-right">Saídas previstas</th><th className="py-2 pr-3 text-right">Resultado do período</th><th className="py-2 text-right">Saldo projetado</th></tr></thead>
@@ -237,34 +230,152 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
         </div>
         <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Valores em atraso e sem vencimento aparecem à parte e não entram no saldo projetado, porque não há data certa de recebimento.</p>
       </section>
+  );
+
+  const monthKey = today.slice(0, 7);
+  const own = entries.filter((e: any) => !isMemo(e));
+  const recebidoMes = sum(own.filter((e: any) => isReceived(e) && dateOf(e).slice(0, 7) === monthKey));
+  const openIncome = own.filter((e: any) => isOpenIncome(e) && e.category !== REIMBURSEMENT_CATEGORY);
+  const devedores = (() => {
+    const map = new Map<string, any>();
+    openIncome.forEach((e: any) => {
+      const key = norm(e.client) || norm(e.title);
+      const row = map.get(key) || { name: String(e.client || e.title).trim(), total: 0, vencido: 0, primeiro: '', itens: 0 };
+      row.total = r2(row.total + Number(e.amount || 0)); row.itens += 1;
+      if (e.dueDate && e.dueDate < today) { row.vencido = r2(row.vencido + Number(e.amount || 0)); }
+      if (e.dueDate && (!row.primeiro || e.dueDate < row.primeiro)) row.primeiro = e.dueDate;
+      map.set(key, row);
+    });
+    return [...map.values()].sort((a, b) => (b.vencido > 0 ? 1 : 0) - (a.vencido > 0 ? 1 : 0) || String(a.primeiro || '9999').localeCompare(String(b.primeiro || '9999')));
+  })();
+  const proximos = entries.filter((e: any) => !isMemo(e) && (isOpenIncome(e) || isOpenExpense(e)) && e.dueDate && e.dueDate >= today).slice().sort((a: any, b: any) => String(a.dueDate).localeCompare(String(b.dueDate))).slice(0, 5);
+  const cobranca = (row: any) => `Olá, ${String(row.name).split(' ')[0]}! Passando para lembrar do pagamento dos honorários: ${brl(row.total)} em aberto${row.vencido > 0 ? `, sendo ${brl(row.vencido)} já vencidos` : ''}. Se precisar combinar de outra forma, é só me avisar. Obrigada!`;
+
+  const openEntryForm = (kind: 'Receita' | 'Despesa') => {
+    setDraft({ title: '', kind, category: kind === 'Receita' ? 'Honorários' : 'Despesas operacionais', client: '', amount: '', dueDate: '', status: 'Pendente' });
+    setIsEntryOpen(true);
+  };
+
+  const renderResumo = () => (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => openEntryForm('Receita')} className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>+ Registrar entrada</button>
+        <button type="button" onClick={() => openEntryForm('Despesa')} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>+ Registrar saída</button>
+        <button type="button" onClick={() => promptInstallments()} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Parcelar honorários de um cliente</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Kpi title="Recebido neste mês" value={brl(recebidoMes)} sub="Entradas já pagas neste mês" color={PALETTE.valoresReceber} />
+        <Kpi title="Ainda vou receber" value={brl(summary.aReceber)} sub={summary.aReceberVencido > 0 ? `${brl(summary.aReceberVencido)} já venceram` : 'Nada vencido'} color={summary.aReceberVencido > 0 ? PALETTE.descontos : PALETTE.textoPrincipal} />
+        <Kpi title="Saldo do escritório" value={brl(summary.saldo)} sub="Tudo que entrou menos o que saiu" />
+      </div>
 
       <section className={card} style={cardStyle}>
-        <div className="border-b pb-3" style={{ borderColor: PALETTE.linhasBordas }}>
-          <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Lançamentos financeiros</h4>
-          <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Registre honorários, parcelas, custas e despesas. Os dados são salvos no escritório (nuvem) e mantêm cópia neste navegador.</p>
-        </div>
-        <form onSubmit={submitDraft} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <input required aria-label="Descrição do lançamento" placeholder="Descrição do lançamento" value={draft.title} onChange={e => setDraft(p => ({ ...p, title: e.target.value }))} className={input} style={inputStyle} />
-          <select aria-label="Tipo de lançamento" value={draft.kind} onChange={e => setDraft(p => ({ ...p, kind: e.target.value }))} className={input} style={inputStyle}><option>Receita</option><option>Despesa</option></select>
-          <select aria-label="Categoria" value={draft.category} onChange={e => setDraft(p => ({ ...p, category: e.target.value }))} className={input} style={inputStyle}><option>Honorários</option><option>Custas processuais</option><option>Despesas do processo</option><option>Despesas operacionais</option><option>Consultoria</option><option>Outros</option></select>
-          <input list="fin-clientes" aria-label="Cliente" placeholder="Cliente (opcional)" value={draft.client} onChange={e => setDraft(p => ({ ...p, client: e.target.value }))} className={input} style={inputStyle} />
-          <input required min="0.01" step="0.01" type="number" aria-label="Valor" placeholder="Valor em R$" value={draft.amount} onChange={e => setDraft(p => ({ ...p, amount: e.target.value }))} className={input} style={inputStyle} />
-          <input type="date" aria-label="Vencimento" value={draft.dueDate} onChange={e => setDraft(p => ({ ...p, dueDate: e.target.value }))} className={input} style={inputStyle} />
-          <select aria-label="Status financeiro" value={draft.status} onChange={e => setDraft(p => ({ ...p, status: e.target.value }))} className={input} style={inputStyle}><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select>
-          <div className="md:col-span-2 flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={() => promptInstallments()} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Gerar parcelas de honorários</button>
-            <button type="submit" className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>Adicionar lançamento</button>
-          </div>
-        </form>
-        <div className="flex flex-wrap gap-2 items-center">
-          <input aria-label="Buscar lançamento" placeholder="Buscar por descrição, cliente ou categoria" value={filterText} onChange={e => setFilterText(e.target.value)} className="p-2 border rounded-lg text-xs flex-1 min-w-[200px]" style={inputStyle} />
-          <select aria-label="Filtrar por status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="p-2 border rounded-lg text-xs" style={inputStyle}><option>Todos</option><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select>
+        <div>
+          <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Quem me deve</h4>
+          <p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Honorários em aberto por cliente. Os vencidos aparecem primeiro.</p>
         </div>
         <div className="space-y-2">
-          {visibleEntries.map(e => <EntryRow key={e.id} e={e} />)}
-          {visibleEntries.length === 0 && <p className="text-xs text-center py-6" style={{ color: PALETTE.textoApoio }}>Nenhum lançamento encontrado.</p>}
+          {devedores.map(row => (
+            <div key={row.name} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border" style={{ borderColor: row.vencido > 0 ? PALETTE.descontos : PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
+              <div className="min-w-0">
+                <p className="text-sm font-bold" style={{ color: PALETTE.textoPrincipal }}>{row.name}</p>
+                <p className="text-[11px] mt-0.5" style={{ color: row.vencido > 0 ? PALETTE.descontos : PALETTE.textoApoio }}>{row.vencido > 0 ? `${brl(row.vencido)} vencido · ` : ''}{row.itens} parcela{row.itens === 1 ? '' : 's'}{row.primeiro ? ` · próxima em ${fmtDate(row.primeiro)}` : ''}</p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-sm font-bold font-mono" style={{ color: PALETTE.valoresReceber }}>{brl(row.total)}</span>
+                <button type="button" onClick={() => notify(copyText(cobranca(row)) ? 'Mensagem de cobrança copiada. Cole no WhatsApp.' : 'Não foi possível copiar.')} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Copiar cobrança</button>
+              </div>
+            </div>
+          ))}
+          {devedores.length === 0 && <p className="text-xs text-center py-5" style={{ color: PALETTE.textoApoio }}>Ninguém deve nada no momento.</p>}
         </div>
       </section>
+
+      <section className={card} style={cardStyle}>
+        <h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Próximos vencimentos</h4>
+        <div className="space-y-2">
+          {proximos.map((e: any) => <EntryRow key={e.id} e={e} />)}
+          {proximos.length === 0 && <p className="text-xs text-center py-5" style={{ color: PALETTE.textoApoio }}>Nada a vencer nos próximos dias.</p>}
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderLancamentos = () => (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Todas as entradas e saídas do escritório, da mais próxima de vencer para a mais distante.</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => openEntryForm('Receita')} className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>+ Registrar entrada</button>
+          <button type="button" onClick={() => openEntryForm('Despesa')} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>+ Registrar saída</button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        <input aria-label="Buscar lançamento" placeholder="Buscar por descrição, cliente ou categoria" value={filterText} onChange={e => setFilterText(e.target.value)} className="p-2 border rounded-lg text-xs flex-1 min-w-[200px]" style={inputStyle} />
+        <select aria-label="Filtrar por status" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="p-2 border rounded-lg text-xs" style={inputStyle}><option>Todos</option><option>Pendente</option><option>Recebido</option><option>Pago</option><option>Atrasado</option></select>
+      </div>
+      <div className="space-y-2">
+        {visibleEntries.map(e => <EntryRow key={e.id} e={e} />)}
+        {visibleEntries.length === 0 && <p className="text-xs text-center py-6" style={{ color: PALETTE.textoApoio }}>Nenhum lançamento encontrado.</p>}
+      </div>
+    </div>
+  );
+
+  const renderEntryModal = () => !isEntryOpen ? null : (
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto" style={{ backgroundColor: 'rgba(17,24,39,0.55)' }} role="dialog" aria-modal="true" aria-label={draft.kind === 'Receita' ? 'Registrar entrada' : 'Registrar saída'} onMouseDown={e => { if (e.target === e.currentTarget) setIsEntryOpen(false); }}>
+      <form onSubmit={submitDraft} className="w-full max-w-lg rounded-2xl shadow-2xl p-5 space-y-3 my-auto" style={{ backgroundColor: PALETTE.fundoCartoes }}>
+        <div className="flex items-start justify-between gap-3 border-b pb-3" style={{ borderColor: PALETTE.linhasBordas }}>
+          <div>
+            <h4 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>{draft.kind === 'Receita' ? 'Registrar entrada' : 'Registrar saída'}</h4>
+            <p className="text-xs mt-0.5" style={{ color: PALETTE.textoApoio }}>{draft.kind === 'Receita' ? 'Dinheiro que você recebeu ou vai receber.' : 'Dinheiro que você pagou ou vai pagar.'}</p>
+          </div>
+          <button type="button" onClick={() => setIsEntryOpen(false)} aria-label="Fechar" className="px-2 py-1 rounded-lg hover:bg-black/5 text-lg leading-none" style={{ color: PALETTE.textoPrincipal }}>×</button>
+        </div>
+        <input required aria-label="Descrição do lançamento" placeholder={draft.kind === 'Receita' ? 'O que é? (ex.: honorários, 1ª parcela)' : 'O que é? (ex.: custas, internet)'} value={draft.title} onChange={e => setDraft(p => ({ ...p, title: e.target.value }))} className={input} style={inputStyle} />
+        <input list="fin-clientes" aria-label="Cliente" placeholder="Cliente (se for de algum)" value={draft.client} onChange={e => setDraft(p => ({ ...p, client: e.target.value }))} className={input} style={inputStyle} />
+        <div className="grid grid-cols-2 gap-3">
+          <input required min="0.01" step="0.01" type="number" aria-label="Valor" placeholder="Valor em R$" value={draft.amount} onChange={e => setDraft(p => ({ ...p, amount: e.target.value }))} className={input} style={inputStyle} />
+          <input type="date" aria-label="Vencimento" value={draft.dueDate} onChange={e => setDraft(p => ({ ...p, dueDate: e.target.value }))} className={input} style={inputStyle} />
+        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold" style={{ color: PALETTE.textoPrincipal }}>
+          <input type="checkbox" checked={draft.status === 'Recebido' || draft.status === 'Pago'} onChange={e => setDraft(p => ({ ...p, status: e.target.checked ? (p.kind === 'Receita' ? 'Recebido' : 'Pago') : 'Pendente' }))} />
+          {draft.kind === 'Receita' ? 'Já recebi' : 'Já paguei'}
+        </label>
+        <details>
+          <summary className="text-[11px] font-bold cursor-pointer" style={{ color: PALETTE.textoApoio }}>Mais opções (categoria)</summary>
+          <select aria-label="Categoria" value={draft.category} onChange={e => setDraft(p => ({ ...p, category: e.target.value }))} className={`${input} mt-2`} style={inputStyle}><option>Honorários</option><option>Custas processuais</option><option>Despesas do processo</option><option>Despesas operacionais</option><option>Consultoria</option><option>Outros</option></select>
+        </details>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={() => setIsEntryOpen(false)} className={ghostBtn} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>Cancelar</button>
+          <button type="submit" className={primaryBtn} style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar</button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const ADV_ITEMS: [NonNullable<typeof adv>, string, string][] = [
+    ['honorarios', 'Honorários por processo', 'Contratual, de êxito e sucumbência de cada processo, com nota fiscal e boleto.'],
+    ['custas', 'Custas e reembolsos', 'O que o escritório adiantou e precisa cobrar de volta do cliente.'],
+    ['alvaras', 'Alvarás e repasses', 'Alvará recebido, parte do escritório e repasse ao cliente.'],
+    ['relatorios', 'Relatórios', 'Resultado por mês, por cliente, extrato para enviar e previsão de entradas e saídas.']
+  ];
+  const renderMais = () => adv === null ? (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {ADV_ITEMS.map(([k, name, desc]) => (
+        <button key={k} type="button" onClick={() => setAdv(k)} className="text-left p-4 rounded-xl border transition hover:shadow-sm" style={cardStyle}>
+          <span className="block text-sm font-bold" style={{ color: PALETTE.textoPrincipal }}>{name}</span>
+          <span className="block text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{desc}</span>
+        </button>
+      ))}
+    </div>
+  ) : (
+    <div className="space-y-4">
+      <button type="button" onClick={() => setAdv(null)} className="text-xs font-bold hover:underline" style={{ color: PALETTE.bordoPrincipal }}>← Voltar para Mais ferramentas</button>
+      {adv === 'honorarios' && renderHonorarios()}
+      {adv === 'custas' && renderCustas()}
+      {adv === 'alvaras' && renderAlvaras()}
+      {adv === 'relatorios' && <>{renderFluxo()}{renderRelatorios()}</>}
     </div>
   );
 
@@ -704,18 +815,17 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
       <datalist id="fin-clientes">{clientNames.map(n => <option key={n} value={n} />)}</datalist>
       <div className="border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
         <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Financeiro</h3>
-        <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Honorários, fluxo de caixa, custas, alvarás e prestação de contas.</p>
+        <p className="text-xs" style={{ color: PALETTE.textoApoio }}>O que entrou, o que falta receber e o que foi pago.</p>
       </div>
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Módulos do financeiro">
         {tabs.map(([k, name]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className="px-3.5 py-2 rounded-lg text-xs font-bold border transition" style={{ backgroundColor: tab === k ? PALETTE.bordoPrincipal : 'transparent', color: tab === k ? '#FFFFFF' : PALETTE.textoPrincipal, borderColor: tab === k ? PALETTE.bordoPrincipal : PALETTE.linhasBordas }}>{name}</button>
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => { setTab(k); if (k === 'mais') setAdv(null); }} className="px-3.5 py-2 rounded-lg text-xs font-bold border transition" style={{ backgroundColor: tab === k ? PALETTE.bordoPrincipal : 'transparent', color: tab === k ? '#FFFFFF' : PALETTE.textoPrincipal, borderColor: tab === k ? PALETTE.bordoPrincipal : PALETTE.linhasBordas }}>{name}</button>
         ))}
       </div>
-      {tab === 'visao' && renderVisao()}
-      {tab === 'honorarios' && renderHonorarios()}
-      {tab === 'custas' && renderCustas()}
-      {tab === 'alvaras' && renderAlvaras()}
-      {tab === 'relatorios' && renderRelatorios()}
+      {tab === 'resumo' && renderResumo()}
+      {tab === 'lancamentos' && renderLancamentos()}
+      {tab === 'mais' && renderMais()}
+      {renderEntryModal()}
     </div>
   );
 }
