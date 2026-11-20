@@ -29,6 +29,7 @@ import {
   MessageCircle,
   Filter,
   X,
+  Menu as MenuIcon,
   Calculator,
   Lock,
   LogOut,
@@ -330,7 +331,17 @@ export default function App() {
     }
   }, [isSidebarCollapsed]);
 
-  const toggleSidebar = () => setIsSidebarCollapsed((current) => !current);
+  const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 767px)').matches : false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const on = () => { setIsMobile(mq.matches); if (!mq.matches) setMobileMenuOpen(false); };
+    mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
+    return () => { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };
+  }, []);
+  const compact = isSidebarCollapsed && !isMobile;
+  const toggleSidebar = () => { if (isMobile) setMobileMenuOpen((o) => !o); else setIsSidebarCollapsed((current) => !current); };
 
   useEffect(() => {
     try {
@@ -1361,7 +1372,7 @@ export default function App() {
 
   const handleDocumentFile = (file) => {
     if (!file) return;
-    if (file.size > 1024 * 1024) { window.alert('Para manter o armazenamento local do navegador estável, selecione um arquivo de até 1 MB. Para documentos maiores, conecte um armazenamento seguro como Supabase Storage.'); return; }
+    if (file.size > 1024 * 1024) { window.alert('Para manter o armazenamento local do navegador estável, selecione um arquivo de até 1 MB. Para documentos maiores, guarde no Drive do escritório.'); return; }
     const reader = new FileReader();
     reader.onload = () => setDocumentDraft(prev => ({ ...prev, fileName: file.name, dataUrl: String(reader.result || ''), size: file.size }));
     reader.onerror = () => window.alert('Não foi possível ler este arquivo. Tente novamente.');
@@ -1983,7 +1994,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     const texto = `${item.process || ''} ${onlyDigits(item.process)} ${item.title || ''} ${item.snippet || ''} ${item.court || ''}`.toLowerCase();
     return texto.includes(scanSearchTerm) || (onlyDigits(scanSearchTerm) && texto.includes(onlyDigits(scanSearchTerm)));
   });
-  const dashboardDateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dashboardDateLabel = (() => { const t = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); })();
 
   // --- TELA DE LOGIN (BLOQUEIA O ACESSO SE NÃO TIVER LOGADO) ---
   if (!session) {
@@ -2153,31 +2164,31 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
       {/* SIDEBAR NAVIGATION: recolhível no desktop e ocultável no celular */}
       <aside
-        className={`${isSidebarCollapsed ? 'hidden md:flex md:w-20' : 'flex w-full md:w-64'} border-r flex-shrink-0 flex-col justify-between md:sticky md:top-0 md:h-screen md:self-start md:overflow-hidden transition-[width] duration-200 ease-in-out`}
+        className={`${mobileMenuOpen ? 'fixed inset-0 z-50 flex w-full overflow-y-auto' : 'hidden'} md:flex ${compact ? 'md:w-20' : 'md:w-64'} md:inset-auto md:z-auto md:overflow-visible border-r flex-shrink-0 flex-col justify-between md:sticky md:top-0 md:h-screen md:self-start md:overflow-hidden transition-[width] duration-200 ease-in-out`}
         style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}
         aria-label="Menu principal"
       >
         <div className="md:flex-1 md:min-h-0 md:overflow-y-auto">
-          <div className={`${isSidebarCollapsed ? 'px-2 pt-3 justify-center' : 'px-3 pt-3 justify-end'} flex`}>
+          <div className={`${compact ? 'px-2 pt-3 justify-center' : 'px-3 pt-3 justify-end'} flex`}>
             <button
               type="button"
               onClick={toggleSidebar}
-              aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-              title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              aria-label={compact ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              title={compact ? 'Expandir menu lateral' : 'Recolher menu lateral'}
               className="inline-flex items-center justify-center gap-2 rounded-lg border p-2 text-xs transition hover:bg-white/10"
               style={{ color: MENU_PALETTE.destaque, borderColor: MENU_PALETTE.linha }}
             >
-              {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              {isMobile ? <X size={16} /> : compact ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
           </div>
           {/* Header Monogram */}
-          <div className={`${isSidebarCollapsed ? 'px-2 py-4' : 'p-6'} text-center border-b transition-all`} style={{ borderColor: MENU_PALETTE.linha }}>
-            <div className={`inline-flex items-center justify-center ${isSidebarCollapsed ? 'w-11 h-11' : 'w-16 h-16'} rounded-full border-2 shadow-md mb-2 transition-all`} style={{ borderColor: MENU_PALETTE.destaque, backgroundColor: MENU_PALETTE.monograma }} title="Valeska Monteiro">
-              <span className={`${isSidebarCollapsed ? 'text-base' : 'text-xl'} font-serif font-bold tracking-wider`} style={{ color: MENU_PALETTE.destaque }}>
+          <div className={`${compact ? 'px-2 py-4' : 'p-6'} text-center border-b transition-all`} style={{ borderColor: MENU_PALETTE.linha }}>
+            <div className={`inline-flex items-center justify-center ${compact ? 'w-11 h-11' : 'w-16 h-16'} rounded-full border-2 shadow-md mb-2 transition-all`} style={{ borderColor: MENU_PALETTE.destaque, backgroundColor: MENU_PALETTE.monograma }} title="Valeska Monteiro">
+              <span className={`${compact ? 'text-base' : 'text-xl'} font-serif font-bold tracking-wider`} style={{ color: MENU_PALETTE.destaque }}>
                 VM
               </span>
             </div>
-            {!isSidebarCollapsed && (
+            {!compact && (
               <div className="mt-1 text-center">
                 <h1 className="font-serif font-bold text-sm tracking-widest uppercase" style={{ color: MENU_PALETTE.destaque }}>
                   VALESKA MONTEIRO
@@ -2188,7 +2199,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
           </div>
 
           {/* Nav Items */}
-          <nav className={`${isSidebarCollapsed ? 'p-2' : 'p-3'} space-y-1`} aria-label="Navegação do escritório">
+          <nav className={`${compact ? 'p-2' : 'p-3'} space-y-1`} aria-label="Navegação do escritório">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Briefcase },
               { id: 'processes', label: 'Processos', icon: FileText },
@@ -2205,20 +2216,20 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               return (
                 <button
                   key={tab.id}
-                  onClick={() => { setActiveTab(tab.id); setModuleNotice(''); if (tab.id === 'agenda') setAgendaSubTab('prazos'); if (tab.id === 'workspace') setWorkspaceSubTab('modelos'); }}
+                  onClick={() => { setMobileMenuOpen(false); setActiveTab(tab.id); setModuleNotice(''); if (tab.id === 'agenda') setAgendaSubTab('prazos'); if (tab.id === 'workspace') setWorkspaceSubTab('modelos'); }}
                   className={`w-full flex items-center rounded-xl text-xs font-semibold transition ${
-                    isSidebarCollapsed ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
+                    compact ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
                   } ${isActive ? 'shadow-md font-bold' : 'hover:bg-white/10'}`}
                   style={{
                     backgroundColor: isActive ? MENU_PALETTE.ativo : 'transparent',
                     color: MENU_PALETTE.texto
                   }}
-                  title={isSidebarCollapsed ? tab.label : undefined}
+                  title={compact ? tab.label : undefined}
                   aria-label={tab.label}
                   aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon size={18} style={{ color: MENU_PALETTE.destaque, flexShrink: 0 }} />
-                  {!isSidebarCollapsed && <span>{tab.label}</span>}
+                  {!compact && <span>{tab.label}</span>}
                 </button>
               );
             })}
@@ -2226,30 +2237,30 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
         </div>
 
         {/* Footer Info & Botão Sair */}
-        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'} border-t flex-shrink-0 text-center text-[10px]`} style={{ borderColor: MENU_PALETTE.linha, color: MENU_PALETTE.destaque }}>
-          {!isSidebarCollapsed && <>
+        <div className={`${compact ? 'p-2' : 'p-4'} border-t flex-shrink-0 text-center text-[10px]`} style={{ borderColor: MENU_PALETTE.linha, color: MENU_PALETTE.destaque }}>
+          {!compact && <>
             <p className="font-semibold"></p>
             <p className="mt-0.5 mb-3" style={{ color: MENU_PALETTE.subtitulo }}></p>
           </>}
           <button
             type="button"
-            onClick={() => { setActiveTab('settings'); setModuleNotice(''); }}
-            className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} py-2 px-2 rounded-lg text-xs font-bold mb-2 border transition`}
+            onClick={() => { setMobileMenuOpen(false); setActiveTab('settings'); setModuleNotice(''); }}
+            className={`w-full flex items-center ${compact ? 'justify-center' : 'justify-center gap-2'} py-2 px-2 rounded-lg text-xs font-bold mb-2 border transition`}
             style={{ color: MENU_PALETTE.texto, backgroundColor: activeTab === 'settings' ? MENU_PALETTE.ativo : 'transparent', borderColor: MENU_PALETTE.linha }}
             title="Configurações"
             aria-label="Configurações"
           >
-            <Settings size={16} /> {!isSidebarCollapsed && <span>Configurações</span>}
+            <Settings size={16} /> {!compact && <span>Configurações</span>}
           </button>
           <button
             type="button"
             onClick={handleLogout}
-            className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-center gap-2'} py-2 px-2 rounded-lg text-xs font-bold border transition`}
+            className={`w-full flex items-center ${compact ? 'justify-center' : 'justify-center gap-2'} py-2 px-2 rounded-lg text-xs font-bold border transition`}
             style={{ color: MENU_PALETTE.destaque, backgroundColor: 'rgba(245,238,233,0.06)', borderColor: MENU_PALETTE.linha }}
             title="Sair do Sistema"
             aria-label="Sair do Sistema"
           >
-            <LogOut size={16} /> {!isSidebarCollapsed && <span>Sair do Sistema</span>}
+            <LogOut size={16} /> {!compact && <span>Sair do Sistema</span>}
           </button>
         </div>
       </aside>
@@ -2257,7 +2268,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 min-w-0 flex flex-col transition-[width] duration-200">
         {/* Top Header Banner */}
-        <header className="sticky top-0 z-30 px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}>
+        <header className="md:sticky top-0 z-30 px-4 md:px-6 py-4 md:py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}>
           <div>
             <h2 className="font-serif font-bold text-lg" style={{ color: '#FFFFFF' }}>
               Advocacia & Consultoria Jurídica
@@ -2275,13 +2286,13 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             <button
               type="button"
               onClick={toggleSidebar}
-              aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-              aria-expanded={!isSidebarCollapsed}
+              aria-label={isMobile ? 'Abrir menu' : isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              aria-expanded={isMobile ? mobileMenuOpen : !isSidebarCollapsed}
               title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
               className="px-3 py-2.5 rounded-xl border font-bold text-xs flex items-center justify-center transition hover:brightness-105"
               style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}
             >
-              {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              {isMobile ? <MenuIcon size={16} /> : isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
             </button>
             <button
               type="button"
@@ -2409,7 +2420,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <h3 className="font-serif text-2xl md:text-[28px] leading-tight" style={{ color: PALETTE.textoPrincipal }}>Painel do escritório</h3>
-                  <p className="mt-1 text-xs capitalize" style={{ color: PALETTE.textoApoio }}>{dashboardDateLabel}</p>
+                  <p className="mt-1 text-xs" style={{ color: PALETTE.textoApoio }}>{dashboardDateLabel}</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
                   <label className="flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs min-w-0 sm:min-w-[260px]" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>
@@ -2879,10 +2890,10 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
                   <h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>
-                    CRM de Clientes
+                    Clientes
                   </h3>
                   <p className="text-xs" style={{ color: PALETTE.textoApoio }}>
-                    Base de contatos e integração com WhatsApp.
+                    Quem você atende, com o financeiro e as mensagens de cada um.
                   </p>
                 </div>
 
@@ -2901,7 +2912,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{cli.name}</h4>
-                        <p className="text-xs" style={{ color: PALETTE.textoApoio }}>{cli.type} • CPF/CNPJ: {cli.document}</p>
+                        <p className="text-xs" style={{ color: PALETTE.textoApoio }}>{cli.type} • {cli.document ? `CPF/CNPJ: ${cli.document}` : 'CPF/CNPJ não informado'}</p>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => setEditingItem({ type: 'client', data: { ...cli } })} className="p-1 hover:bg-black/5 rounded" title="Editar cliente">
@@ -3287,7 +3298,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 {documents.map(doc => <article key={doc.id} className="p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><div className="min-w-0"><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{doc.title}</h4><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>{doc.category} · {doc.fileName} · {doc.client || 'Sem cliente'} {doc.process ? `· Processo ${doc.process}` : ''}</p><p className="text-[10px] mt-1" style={{ color: PALETTE.textoApoio }}>Adicionado em {new Date(doc.createdAt).toLocaleDateString('pt-BR')}</p></div><div className="flex items-center gap-2"><a href={doc.dataUrl} download={doc.fileName} className="px-3 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ color: PALETTE.textoPrincipal, borderColor: PALETTE.linhasBordas }}><Download size={13}/> Baixar</a><button title="Excluir documento" onClick={() => { if (window.confirm('Excluir este documento?')) setDocuments(prev => prev.filter(x => x.id !== doc.id)); }} className="p-2" style={{ color: PALETTE.descontos }}><Trash2 size={14}/></button></div></article>)}
                 {documents.length === 0 && <p className="p-8 text-center rounded-xl border text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Nenhum documento cadastrado.</p>}
               </section>
-              <p className="text-[10px] p-3 rounded-lg" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>Atenção: nesta versão, os arquivos ficam no armazenamento local do navegador, não em repositório jurídico centralizado. Para documentos sigilosos e uso por vários dispositivos, conecte o módulo ao Supabase Storage com controle de acesso, políticas de segurança e backup.</p>
+              <p className="text-[10px] p-3 rounded-lg" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>Atenção: os arquivos ficam guardados só neste aparelho, e não aparecem em outros computadores ou no celular. Para documentos sigilosos ou que você precise ver em mais de um lugar, guarde também no Drive do escritório.</p>
             </div>
           )}
 
@@ -3296,7 +3307,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             <div className="space-y-5">
               <div><h3 className="font-serif font-bold text-xl" style={{ color: PALETTE.textoPrincipal }}>Relatórios gerenciais</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Indicadores calculados a partir dos registros disponíveis no sistema.</p></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Leads convertidos', value: leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length }, { label: 'Conversão do funil', value: `${leads.length ? Math.round(leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
+                {[{ label: 'Processos cadastrados', value: processes.length }, { label: 'Clientes cadastrados', value: clients.length }, { label: 'Contratos fechados', value: leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length }, { label: 'Contatos que viraram clientes', value: `${leads.length ? Math.round(leads.filter(l => CONVERTED_STAGES.includes(l.stage)).length / leads.length * 100) : 0}%` }].map(kpi => <div key={kpi.label} className="p-4 rounded-xl border" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><p className="text-[10px] uppercase font-bold" style={{ color: PALETTE.textoApoio }}>{kpi.label}</p><p className="text-2xl font-serif mt-2" style={{ color: PALETTE.textoPrincipal }}>{kpi.value}</p></div>)}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-serif font-bold" style={{ color: PALETTE.textoPrincipal }}>Processos por área</h4>{dashboardAreaData.map(row => <div key={row.label} className="space-y-1"><div className="flex justify-between text-xs" style={{ color: PALETTE.textoPrincipal }}><span>{row.label}</span><strong>{row.count}</strong></div><div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: PALETTE.linhasBordas }}><div className="h-full rounded-full" style={{ width: `${processes.length ? row.count / Math.max(1, processes.length) * 100 : 0}%`, backgroundColor: PALETTE.bordoPrincipal }} /></div></div>)}</section>

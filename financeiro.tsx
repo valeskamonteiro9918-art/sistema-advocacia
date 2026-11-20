@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadDocx, DocxParagraph } from './docx';
 import { fixCase } from './texto';
+import { TIPOS_ENTRADA, TIPOS_SAIDA, tituloVazio, montarTitulo, lerTitulo, TituloDraft } from './tituloLancamento';
 
 // ---------------------------------------------------------------------------
 // Regras financeiras do escritório
@@ -176,19 +177,21 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
   const tabs: [typeof tab, string][] = [['resumo', 'Resumo'], ['lancamentos', 'Lançamentos'], ['relatorios', 'Relatórios'], ['mais', 'Mais ferramentas']];
 
   // ----------------------------- Visão geral -----------------------------
+  const [tit, setTit] = useState<TituloDraft>(tituloVazio('Receita'));
   const [draft, setDraft] = useState({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterText, setFilterText] = useState('');
   const submitDraft = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!draft.title.trim() || Number(draft.amount) <= 0) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
+    if ((tit.tipo === 'Outro' && !tit.outro.trim()) || Number(draft.amount) <= 0) { window.alert('Escolha o que é (ou descreva em "Outro") e informe um valor maior que zero.'); return; }
+    const titulo = fixCase(montarTitulo(tit, draft.client));
     const done = draft.status === 'Recebido' || draft.status === 'Pago';
     if (editingId) {
-      update(editingId, { title: fixCase(draft.title.trim()), kind: draft.kind, category: draft.category, client: fixCase(draft.client.trim()), amount: Number(draft.amount), dueDate: draft.dueDate, status: draft.status });
+      update(editingId, { title: titulo, kind: draft.kind, category: draft.category, client: fixCase(draft.client.trim()), amount: Number(draft.amount), dueDate: draft.dueDate, status: draft.status });
       setEditingId(null); setIsEntryOpen(false); notify('Lançamento atualizado.');
       return;
     }
-    add([{ ...draft, title: fixCase(draft.title.trim()), client: fixCase(draft.client.trim()), amount: Number(draft.amount), paidAt: done ? today : undefined }]);
+    add([{ ...draft, title: titulo, client: fixCase(draft.client.trim()), amount: Number(draft.amount), paidAt: done ? today : undefined }]);
     setDraft({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
     setIsEntryOpen(false);
     notify('Lançamento financeiro cadastrado.');
@@ -265,12 +268,14 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
 
   const openEntryForm = (kind: 'Receita' | 'Despesa') => {
     setEditingId(null);
+    setTit(tituloVazio(kind));
     setDraft({ title: '', kind, category: kind === 'Receita' ? 'Honorários' : 'Despesas operacionais', client: '', amount: '', dueDate: '', status: 'Pendente' });
     setIsEntryOpen(true);
   };
 
   const openEditEntry = (e: any) => {
     setEditingId(e.id);
+    setTit(lerTitulo(e.title, e.kind || 'Receita', e.client || ''));
     setDraft({ title: e.title || '', kind: e.kind || 'Receita', category: e.category || 'Honorários', client: e.client || '', amount: String(e.amount ?? ''), dueDate: e.dueDate || '', status: e.status || 'Pendente' });
     setIsEntryOpen(true);
   };
@@ -351,7 +356,20 @@ export default function FinanceModule({ PALETTE, entries, setEntries, processes,
           </div>
           <button type="button" onClick={() => { setIsEntryOpen(false); setEditingId(null); }} aria-label="Fechar" className="px-2 py-1 rounded-lg hover:bg-black/5 text-lg leading-none" style={{ color: PALETTE.textoPrincipal }}>×</button>
         </div>
-        <input required aria-label="Descrição do lançamento" placeholder={draft.kind === 'Receita' ? 'O que é? (ex.: honorários, 1ª parcela)' : 'O que é? (ex.: custas, internet)'} value={draft.title} onChange={e => setDraft(p => ({ ...p, title: e.target.value }))} className={input} style={inputStyle} />
+        <div className="grid grid-cols-1 gap-2">
+          <select aria-label="O que é" value={tit.tipo} onChange={e => setTit(t => ({ ...t, tipo: e.target.value }))} className={input} style={inputStyle}>
+            {(draft.kind === 'Despesa' ? TIPOS_SAIDA : TIPOS_ENTRADA).map(t => <option key={t}>{t}</option>)}
+          </select>
+          {tit.tipo === 'Parcela' && (
+            <div className="flex items-center gap-2 text-xs" style={{ color: PALETTE.textoPrincipal }}>
+              <span>Parcela</span>
+              <input type="number" min="1" aria-label="Número da parcela" value={tit.pn} onChange={e => setTit(t => ({ ...t, pn: e.target.value }))} className={input} style={{ ...inputStyle, width: 72 }} />
+              <span>de</span>
+              <input type="number" min="1" aria-label="Total de parcelas" value={tit.pt} onChange={e => setTit(t => ({ ...t, pt: e.target.value }))} className={input} style={{ ...inputStyle, width: 72 }} />
+            </div>
+          )}
+          {tit.tipo === 'Outro' && <input required aria-label="Descrição" placeholder="Descreva" value={tit.outro} onChange={e => setTit(t => ({ ...t, outro: e.target.value }))} className={input} style={inputStyle} />}
+        </div>
         <input list="fin-clientes" aria-label="Cliente" placeholder="Cliente (se for de algum)" value={draft.client} onChange={e => setDraft(p => ({ ...p, client: e.target.value }))} className={input} style={inputStyle} />
         <div className="grid grid-cols-2 gap-3">
           <input required min="0.01" step="0.01" type="number" aria-label="Valor" placeholder="Valor em R$" value={draft.amount} onChange={e => setDraft(p => ({ ...p, amount: e.target.value }))} className={input} style={inputStyle} />

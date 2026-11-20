@@ -84,7 +84,7 @@ export default function MeuPainel({ PALETTE, me, processes, deadlines, tasks, pr
     <div className="space-y-4 md:space-y-5" style={{ color: PALETTE.textoPrincipal }}>
       <div>
         <h3 className="font-serif text-2xl md:text-[28px] leading-tight">Meu painel · {me.name}</h3>
-        <p className="mt-1 text-xs capitalize" style={{ color: PALETTE.textoApoio }}>{dateLabel}</p>
+        <p className="mt-1 text-xs" style={{ color: PALETTE.textoApoio }}>{dateLabel}</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">

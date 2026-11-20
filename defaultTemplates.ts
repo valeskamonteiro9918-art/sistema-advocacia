@@ -11,7 +11,7 @@ const PROCURACAO = `PROCURAÇÃO
 
 OUTORGANTE: [NOME COMPLETO], [nacionalidade], [estado civil], [profissão], inscrito(a) no CPF n.º [CPF], residente e domiciliado(a) à [ENDEREÇO COMPLETO], CEP [CEP], [CIDADE]/[UF], endereço eletrônico [E-MAIL].
 
-OUTORGADO: VALESKA MONTEIRO DA CRUZ, brasileira, solteira, advogada, inscrita na OAB/ES sob o n.º 41.715, com endereço eletrônico valeskamonteiro.adv@gmail.com.
+OUTORGADO: VALESKA MONTEIRO DA CRUZ, brasileira, solteira, advogada, inscrita na OAB/ES sob o n.º 41.715, com endereço eletrônico contato@valeskamonteiro.adv.br.
 
 PODERES: O(A) Outorgante confere ao(à) Outorgado(a) amplos poderes "AD JUDICIA ET EXTRA", para atuar em seu nome, incluindo a representação perante órgãos da administração pública direta ou indireta, em qualquer instância ou tribunal, e para a prática de atos administrativos, judiciais e extrajudiciais, com base no art. 5º, § 2º da Lei n.º 8.906/1994 (Estatuto da OAB) e no art. 105 do Código de Processo Civil, com a finalidade de:
 
@@ -57,7 +57,7 @@ QUALIFICAÇÃO DAS PARTES
 
 CONTRATANTE: [NOME COMPLETO], [nacionalidade], [estado civil], [profissão], inscrito(a) no CPF n.º [CPF], residente e domiciliado(a) à [ENDEREÇO COMPLETO], CEP [CEP], [CIDADE]/[UF], endereço eletrônico [E-MAIL].
 
-CONTRATADA: VALESKA MONTEIRO DA CRUZ, brasileira, solteira, advogada, inscrita na OAB/ES sob o n.º 41.715, com endereço eletrônico valeskamonteiro.adv@gmail.com.
+CONTRATADA: VALESKA MONTEIRO DA CRUZ, brasileira, solteira, advogada, inscrita na OAB/ES sob o n.º 41.715, com endereço eletrônico contato@valeskamonteiro.adv.br.
 
 As partes acima qualificadas têm entre si, justo e contratado, o presente instrumento de prestação de serviços advocatícios, que se regerá pelas cláusulas e condições a seguir, em conformidade com o Código Civil, o Estatuto da Advocacia e o Código de Ética e Disciplina da OAB.
 

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { brl, todayLocal, isMemo } from './financeiro';
 import { fixCase } from './texto';
+import { TIPOS_ENTRADA, montarTitulo, lerTitulo, tituloVazio, TituloDraft } from './tituloLancamento';
 
 // Financeiro dentro do cliente: plano de pagamento padronizado (total, entrada e número de parcelas),
 // lista de parcelas com "recebi", edição e cobrança.
@@ -59,6 +60,7 @@ export default function ClientFinanceModal({ PALETTE, client, entries, setEntrie
   const preview = total > 0 ? buildPlan(total, Number(plan.entrada) || 0, plan.parcelas, plan.first) : [];
   const [editId, setEditId] = useState<string | null>(null);
   const [ed, setEd] = useState({ title: '', amount: '', dueDate: '' });
+  const [edTit, setEdTit] = useState<TituloDraft>(tituloVazio('Receita'));
 
   const inputCls = 'p-2.5 border rounded-lg text-xs w-full';
   const inputStyle = { borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal } as React.CSSProperties;
@@ -71,7 +73,7 @@ export default function ClientFinanceModal({ PALETTE, client, entries, setEntrie
     if (!/^\d{4}-\d{2}-\d{2}$/.test(plan.first)) { window.alert('Informe a data do primeiro vencimento.'); return; }
     if (fees.length > 0 && !window.confirm('Este cliente já tem lançamentos. O novo plano será somado aos que já existem. Continuar?')) return;
     const stamp = Date.now();
-    const novos = preview.map((r, i) => ({ id: `fin-${stamp}-${i}`, createdAt: new Date().toISOString(), title: `Honorários, ${r.label.toLowerCase()} · ${name}`, kind: 'Receita', category: 'Honorários', client: name, amount: r.amount, dueDate: r.due, status: 'Pendente' }));
+    const novos = preview.map((r, i) => ({ id: `fin-${stamp}-${i}`, createdAt: new Date().toISOString(), title: `${r.label} · ${name}`, kind: 'Receita', category: 'Honorários', client: name, amount: r.amount, dueDate: r.due, status: 'Pendente' }));
     setEntries((prev: any[]) => [...novos, ...prev]);
     setShowPlan(false);
     setPlan({ total: '', entrada: '0', parcelas: 3, first: today });
@@ -82,10 +84,10 @@ export default function ClientFinanceModal({ PALETTE, client, entries, setEntrie
   const markPaid = (e: any) => patch(e.id, { status: 'Recebido', paidAt: today });
   const undo = (e: any) => patch(e.id, { status: 'Pendente', paidAt: undefined });
   const remove = (e: any) => { if (window.confirm('Excluir este lançamento? Não dá para desfazer.')) setEntries((prev: any[]) => prev.filter(x => x.id !== e.id)); };
-  const startEdit = (e: any) => { setEditId(e.id); setEd({ title: e.title || '', amount: String(e.amount ?? ''), dueDate: e.dueDate || '' }); };
+  const startEdit = (e: any) => { setEditId(e.id); setEdTit(lerTitulo(e.title, e.kind || 'Receita', e.client || name)); setEd({ title: e.title || '', amount: String(e.amount ?? ''), dueDate: e.dueDate || '' }); };
   const saveEdit = () => {
-    if (!ed.title.trim() || !(Number(ed.amount) > 0)) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
-    patch(editId as string, { title: fixCase(ed.title.trim()), amount: Number(ed.amount), dueDate: ed.dueDate });
+    if ((edTit.tipo === 'Outro' && !edTit.outro.trim()) || !(Number(ed.amount) > 0)) { window.alert('Escolha o que é e informe um valor maior que zero.'); return; }
+    patch(editId as string, { title: fixCase(montarTitulo(edTit, name)), amount: Number(ed.amount), dueDate: ed.dueDate });
     setEditId(null);
   };
   const cobranca = () => {
@@ -156,7 +158,11 @@ export default function ClientFinanceModal({ PALETTE, client, entries, setEntrie
               const late = !done && e.dueDate && e.dueDate < today;
               if (editId === e.id) return (
                 <div key={e.id} className="p-3 rounded-lg border grid grid-cols-1 md:grid-cols-[1fr_120px_150px_auto] gap-2 items-center" style={{ borderColor: PALETTE.bordoPrincipal }}>
-                  <input aria-label="Descrição" value={ed.title} onChange={x => setEd(p => ({ ...p, title: x.target.value }))} className={inputCls} style={inputStyle} />
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <select aria-label="O que é" value={edTit.tipo} onChange={x => setEdTit(t => ({ ...t, tipo: x.target.value }))} className={inputCls} style={{ ...inputStyle, width: 'auto' }}>{TIPOS_ENTRADA.map(t => <option key={t}>{t}</option>)}</select>
+                    {edTit.tipo === 'Parcela' && <><input type="number" min="1" aria-label="Número da parcela" value={edTit.pn} onChange={x => setEdTit(t => ({ ...t, pn: x.target.value }))} className={inputCls} style={{ ...inputStyle, width: 56 }} /><span className="text-xs">de</span><input type="number" min="1" aria-label="Total de parcelas" value={edTit.pt} onChange={x => setEdTit(t => ({ ...t, pt: x.target.value }))} className={inputCls} style={{ ...inputStyle, width: 56 }} /></>}
+                    {edTit.tipo === 'Outro' && <input aria-label="Descrição" placeholder="Descreva" value={edTit.outro} onChange={x => setEdTit(t => ({ ...t, outro: x.target.value }))} className={inputCls} style={{ ...inputStyle, width: 160 }} />}
+                  </div>
                   <input aria-label="Valor" type="number" step="0.01" value={ed.amount} onChange={x => setEd(p => ({ ...p, amount: x.target.value }))} className={inputCls} style={inputStyle} />
                   <input aria-label="Vencimento" type="date" value={ed.dueDate} onChange={x => setEd(p => ({ ...p, dueDate: x.target.value }))} className={inputCls} style={inputStyle} />
                   <div className="flex gap-2"><button type="button" onClick={saveEdit} className="px-3 py-2 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar</button><button type="button" onClick={() => setEditId(null)} className={ghost} style={{ borderColor: PALETTE.linhasBordas }}>Cancelar</button></div>
