@@ -2155,7 +2155,6 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               style={{ color: MENU_PALETTE.destaque, borderColor: MENU_PALETTE.linha }}
             >
               {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-              {!isSidebarCollapsed && <span className="hidden md:inline">Recolher menu</span>}
             </button>
           </div>
           {/* Header Monogram */}
@@ -2245,7 +2244,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 min-w-0 flex flex-col transition-[width] duration-200">
         {/* Top Header Banner */}
-        <header className="px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}>
+        <header className="sticky top-0 z-30 px-6 py-5 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm" style={{ backgroundColor: MENU_PALETTE.fundo, borderColor: MENU_PALETTE.linha }}>
           <div>
             <h2 className="font-serif font-bold text-lg" style={{ color: '#FFFFFF' }}>
               Advocacia & Consultoria Jurídica
@@ -2266,11 +2265,10 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               aria-label={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
               aria-expanded={!isSidebarCollapsed}
               title={isSidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-              className="px-3 py-2.5 rounded-xl border font-bold text-xs flex items-center gap-2 transition hover:brightness-105"
+              className="px-3 py-2.5 rounded-xl border font-bold text-xs flex items-center justify-center transition hover:brightness-105"
               style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}
             >
               {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-              <span className="hidden sm:inline">{isSidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}</span>
             </button>
             <button
               type="button"
