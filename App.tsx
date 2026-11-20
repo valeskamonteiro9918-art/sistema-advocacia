@@ -442,6 +442,9 @@ export default function App() {
 
   // Modals & Creation States
   const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
+  const [processSort, setProcessSort] = useState<'area' | 'movimentacao' | 'numero' | 'cliente'>(() => {
+    try { const v = localStorage.getItem('vm-process-sort'); return (v === 'movimentacao' || v === 'numero' || v === 'cliente') ? v : 'area'; } catch { return 'area'; }
+  });
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importList, setImportList] = useState<any[]>([]);
@@ -1857,6 +1860,25 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     if (!melhor) return null;
     return { ...melhor, dias: Math.floor((inactivityToday.getTime() - melhor.d.getTime()) / 86400000) };
   };
+  const processArea = (p: any) => {
+    const txt = `${p.action || ''} ${p.court || ''}`;
+    if (/trabalh|reclama|horas extras|\bTRT\b/i.test(txt)) return 'Trabalhista';
+    if (/fam[ií]lia|alimentos|guarda|uni[aã]o est[aá]vel|div[oó]rcio|partilha|invent[aá]rio|sucess|ado[cç][aã]o|reconhecimento de uni/i.test(txt)) return 'Família';
+    if (/c[ií]vel|indeniza|monit[oó]ria|jec|resolu[cç][aã]o contratual|cobran[cç]a|execu[cç][aã]o|juizado/i.test(txt)) return 'Cível';
+    return 'Outras áreas';
+  };
+  const PROCESS_AREAS = ['Trabalhista', 'Família', 'Cível', 'Outras áreas'];
+  const sortedProcesses = () => {
+    const lastTime = (p: any) => { const u = lastMovementOf(p); return u ? u.d.getTime() : (dayFromValue(p.monitorSince)?.getTime() || 0); };
+    const byMov = (a: any, b: any) => lastTime(b) - lastTime(a);
+    // número CNJ NNNNNNN-DD.AAAA.J.TR.OOOO: ordena por tribunal (J.TR), ano e sequência
+    const numKey = (p: any) => { const m = String(p.number || '').match(/(\d{7})-?(\d{2})\.?(\d{4})\.?(\d)\.?(\d{2})\.?(\d{4})/); return m ? `${m[4]}${m[5]}${m[6]}${m[3]}${m[1]}` : String(p.number || '').replace(/\D/g, ''); };
+    const list = [...processes];
+    if (processSort === 'cliente') return list.sort((a: any, b: any) => String(a.client || '').localeCompare(String(b.client || ''), 'pt-BR', { sensitivity: 'base' }));
+    if (processSort === 'numero') return list.sort((a: any, b: any) => numKey(a).localeCompare(numKey(b)));
+    if (processSort === 'movimentacao') return list.sort(byMov);
+    return list.sort((a: any, b: any) => (PROCESS_AREAS.indexOf(processArea(a)) - PROCESS_AREAS.indexOf(processArea(b))) || byMov(a, b));
+  };
   const inactivityKey = inactivityAlerts.map((a) => onlyDigits(a.proc.number)).join(',');
 
   useEffect(() => {
@@ -2668,7 +2690,16 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold" style={{ color: PALETTE.textoApoio }}>
+                    Ordenar por
+                    <select aria-label="Ordenar processos" value={processSort} onChange={(e) => { const v = e.target.value as any; setProcessSort(v); try { localStorage.setItem('vm-process-sort', v); } catch { /* sem armazenamento */ } }} className="p-2 border rounded-lg text-xs font-normal" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes, color: PALETTE.textoPrincipal }}>
+                      <option value="area">Área</option>
+                      <option value="movimentacao">Movimentação mais recente</option>
+                      <option value="numero">Número do processo</option>
+                      <option value="cliente">Cliente (A-Z)</option>
+                    </select>
+                  </label>
                   <button
                     onClick={() => runMovementCheck(false)}
                     disabled={movCheck.running}
@@ -2695,8 +2726,12 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {processes.map((proc) => (
-                  <div key={proc.id} className="p-4 rounded-xl border bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" style={{ borderColor: PALETTE.linhasBordas }}>
+                {sortedProcesses().map((proc, idx, arr) => (
+                  <React.Fragment key={proc.id}>
+                  {processSort === 'area' && (idx === 0 || processArea(arr[idx - 1]) !== processArea(proc)) && (
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider pt-2" style={{ color: PALETTE.bordoPrincipal }}>{processArea(proc)} · {arr.filter((x: any) => processArea(x) === processArea(proc)).length}</h4>
+                  )}
+                  <div className="p-4 rounded-xl border bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" style={{ borderColor: PALETTE.linhasBordas }}>
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>{proc.number}</span>
@@ -2736,6 +2771,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                       </span>
                     </div>
                   </div>
+                  </React.Fragment>
                 ))}
               </div>
 
