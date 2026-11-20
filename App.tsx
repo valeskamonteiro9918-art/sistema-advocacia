@@ -1866,6 +1866,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
   const renderDraftCard = (draft: any) => (
 <div key={draft.id} className="p-3 rounded-lg border space-y-2" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{draft.client} · {draft.process}</strong><span className="text-[10px] font-semibold" style={{ color: PALETTE.dourado }}>{draft.status}</span></div><p className="text-xs whitespace-pre-wrap" style={{ color: PALETTE.textoApoio }}>{draft.message}</p><div className="flex flex-wrap gap-2"><button onClick={() => { const revised = window.prompt('Revise ou edite a mensagem. Nada será enviado automaticamente:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Revisada por você' } : x)); }} className="px-3 py-1.5 rounded-lg border text-xs font-bold" style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>Revisar mensagem</button><button onClick={() => { const revised = window.prompt('Confira o texto final. Para abrir o WhatsApp, confirme o texto abaixo:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Aprovada para envio manual' } : x)); const phone = String(draft.phone || '').replace(/\D/g, ''); if (phone) window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#166534' }}>Abrir WhatsApp após revisar</button></div></div>
   );
+  const prepareClientMessage = (proc: any, ult: any) => {
+    const cliente = (clients || []).find((c: any) => String(c.name || '').trim().toLowerCase() === String(proc.client || '').trim().toLowerCase());
+    const primeiro = String(proc.client || '').split(' ')[0];
+    const assunto = ult ? `A última movimentação foi em ${ult.d.toLocaleDateString('pt-BR')}: ${String(ult.title).slice(0, 140)}.` : 'Seu processo segue em acompanhamento.';
+    const message = `Olá, ${primeiro}! Passando para atualizar você sobre o processo nº ${proc.number}. ${assunto} Estamos acompanhando o andamento e, se houver alguma providência necessária, entrarei em contato. Qualquer dúvida, é só me chamar.`;
+    setClientMessageDrafts((prev: any) => [{ id: `draft-manual-${Date.now()}`, process: proc.number, client: proc.client, phone: cliente?.phone || '', message, status: 'Aguardando sua revisão', createdAt: new Date().toISOString() }, ...(Array.isArray(prev) ? prev : [])]);
+    if (!cliente?.phone) window.alert('Este cliente está sem telefone cadastrado. O texto foi preparado, mas para abrir o WhatsApp cadastre o telefone em Clientes (CRM).');
+  };
   const processArea = (p: any) => {
     const txt = `${p.action || ''} ${p.court || ''}`;
     if (/trabalh|reclama|horas extras|\bTRT\b/i.test(txt)) return 'Trabalhista';
@@ -2792,13 +2800,14 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                                 {mov.description && <p className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.description}</p>}
                               </div>
                             ))}
-                            {drafts.length > 0 && (
-                              <div className="space-y-2 pt-2">
+                            <div className="space-y-2 pt-2">
+                              <div className="flex flex-wrap justify-between items-center gap-2">
                                 <h5 className="font-serif font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Mensagem para o cliente</h5>
-                                <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>O sistema prepara o texto quando chega uma movimentação. Nada é enviado: você revisa e decide se abre o WhatsApp.</p>
-                                {drafts.map((d: any) => renderDraftCard(d))}
+                                <button type="button" onClick={() => prepareClientMessage(proc, ult)} className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Preparar mensagem para {String(proc.client || 'o cliente').split(' ')[0]}</button>
                               </div>
-                            )}
+                              <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>O texto é preparado a partir da última movimentação. Nada é enviado: você revisa e decide se abre o WhatsApp.</p>
+                              {drafts.map((d: any) => renderDraftCard(d))}
+                            </div>
                           </div>
                         )}
                       </>
