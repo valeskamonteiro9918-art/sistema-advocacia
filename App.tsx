@@ -436,7 +436,9 @@ export default function App() {
   useEffect(() => { try { sessionStorage.setItem('vm-nav-agenda', agendaSubTab); } catch { /* sem armazenamento */ } }, [agendaSubTab]);
   const [scanFilter, setScanFilter] = useState('pendentes');
   const [scanSearch, setScanSearch] = useState('');
-  const [workspaceSubTab, setWorkspaceSubTab] = useState(() => readNav('vm-nav-workspace', 'modelos', ['modelos', 'calculadoras', 'verbas']));
+  const [workspaceSubTab, setWorkspaceSubTab] = useState(() => readNav('vm-nav-workspace', 'calculadoras', ['calculadoras', 'verbas']));
+  const [docSubTab, setDocSubTab] = useState(() => readNav('vm-nav-docs', 'modelos', ['modelos', 'arquivos']));
+  useEffect(() => { try { sessionStorage.setItem('vm-nav-docs', docSubTab); } catch { /* sem armazenamento */ } }, [docSubTab]);
   useEffect(() => { try { sessionStorage.setItem('vm-nav-workspace', workspaceSubTab); } catch { /* sem armazenamento */ } }, [workspaceSubTab]);
 
   // Módulos novos: captação, financeiro, documentos, relatórios e configurações.
@@ -2208,7 +2210,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               { id: 'crm', label: 'Clientes', icon: Users },
               { id: 'finances', label: 'Financeiro', icon: Wallet },
               { id: 'documents', label: 'Documentos', icon: FolderOpen },
-              { id: 'workspace', label: 'Modelos e Calculadoras', icon: Copy },
+              { id: 'workspace', label: 'Calculadoras', icon: Calculator },
               { id: 'reports', label: 'Relatórios', icon: BarChart3 }
             ].map((tab) => {
               const Icon = tab.icon;
@@ -2216,7 +2218,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               return (
                 <button
                   key={tab.id}
-                  onClick={() => { setMobileMenuOpen(false); setActiveTab(tab.id); setModuleNotice(''); if (tab.id === 'agenda') setAgendaSubTab('prazos'); if (tab.id === 'workspace') setWorkspaceSubTab('modelos'); }}
+                  onClick={() => { setMobileMenuOpen(false); setActiveTab(tab.id); setModuleNotice(''); if (tab.id === 'agenda') setAgendaSubTab('prazos'); if (tab.id === 'workspace') setWorkspaceSubTab('calculadoras'); if (tab.id === 'documents') setDocSubTab('modelos'); }}
                   className={`w-full flex items-center rounded-xl text-xs font-semibold transition ${
                     compact ? 'justify-center px-2 py-3' : 'gap-3 px-4 py-3'
                   } ${isActive ? 'shadow-md font-bold' : 'hover:bg-white/10'}`}
@@ -2379,9 +2381,18 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               ))}
             </div>
           )}
+          {activeTab === 'documents' && (
+            <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+              {[{ id: 'modelos', label: 'Modelos de peças' }, { id: 'arquivos', label: 'Arquivos do escritório' }].map(item => (
+                <button key={item.id} onClick={() => setDocSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: docSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: docSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
           {activeTab === 'workspace' && (
             <div className="flex flex-wrap gap-2 mb-5 p-1 rounded-xl border w-fit" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
-              {[{ id: 'modelos', label: 'Modelos de peças' }, { id: 'calculadoras', label: 'Calculadoras jurídicas' }, { id: 'verbas', label: 'Apuração de verbas' }].map(item => (
+              {[{ id: 'calculadoras', label: 'Calculadoras jurídicas' }, { id: 'verbas', label: 'Apuração de verbas' }].map(item => (
                 <button key={item.id} onClick={() => setWorkspaceSubTab(item.id)} className="px-3 py-2 rounded-lg text-xs font-bold transition" style={{ backgroundColor: workspaceSubTab === item.id ? PALETTE.bordoPrincipal : 'transparent', color: workspaceSubTab === item.id ? '#FFFFFF' : PALETTE.textoPrincipal }}>
                   {item.label}
                 </button>
@@ -3102,7 +3113,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
           )}
 
           {/* TAB 6: MODELOS DE PEÇAS */}
-          {activeTab === 'workspace' && workspaceSubTab === 'modelos' && (
+          {activeTab === 'documents' && docSubTab === 'modelos' && (
             <div className="p-6 rounded-2xl border space-y-6" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
               <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div>
@@ -3281,7 +3292,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
           )}
 
           {/* MÓDULO: DOCUMENTOS */}
-          {activeTab === 'documents' && (
+          {activeTab === 'documents' && docSubTab === 'arquivos' && (
             <div className="space-y-5">
               <section className="p-5 rounded-2xl border space-y-4" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                 <div><h3 className="font-serif font-bold text-lg" style={{ color: PALETTE.textoPrincipal }}>Documentos do escritório</h3><p className="text-xs mt-1" style={{ color: PALETTE.textoApoio }}>Organize arquivos por cliente, processo e categoria.</p></div>
