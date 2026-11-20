@@ -8,6 +8,7 @@ import { downloadDocx, textToParagraphs } from './docx';
 import { teamOf, memberByEmail, RESPONSIBLE_OPTIONS, processResponsible } from './equipe';
 import MeuPainel, { EquipeResumo } from './painel';
 import PrazosView from './prazosView';
+import MessageComposer, { MsgOption } from './mensagens';
 import FinanceModule, { financeSummary, brl as brlFmt } from './financeiro';
 import {
   Briefcase,
@@ -1261,15 +1262,29 @@ export default function App() {
     setLeads(prev => prev.map((x: any) => x.id === id ? { ...x, docs: { ...(x.docs || {}), [item]: !x.docs?.[item] } } : x));
   };
 
-  const sendLeadMessage = (lead: any, key: string) => {
-    const m = LEAD_MESSAGES[key];
-    if (!m) return;
-    const revised = window.prompt('Revise a mensagem antes de abrir o WhatsApp. O sistema não envia nada sozinho:', m.fn(lead));
-    if (revised === null || !revised.trim()) return;
-    const digits = String(lead.phone || '').replace(/\D/g, '');
-    if (!digits) { window.alert('Cadastre um telefone para este contato.'); return; }
-    const full = digits.length > 11 ? digits : `55${digits}`;
-    window.open(`https://wa.me/${full}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer');
+  const [composer, setComposer] = useState<null | { name: string; phone: string; subtitle?: string; options: MsgOption[] }>(null);
+  const openLeadComposer = (lead: any) => {
+    setComposer({
+      name: lead.name, phone: lead.phone || '', subtitle: `${lead.caseType || lead.area || 'Contato'} · ${lead.stage}`,
+      options: Object.entries(LEAD_MESSAGES).map(([key, m]) => ({ key, label: m.label, text: m.fn(lead) }))
+    });
+  };
+  const openClientComposer = (cli: any) => {
+    const nome = String(cli.name || '').trim();
+    const primeiro = firstName(nome);
+    const procs = (processes || []).filter((p: any) => String(p.client || '').trim().toLowerCase() === nome.toLowerCase());
+    const fake = { name: nome, caseType: '', docs: {} };
+    const keys = ['consulta', 'boasvindas', 'quinzenal', 'parcela', 'encerramento'];
+    const options: MsgOption[] = [
+      ...procs.map((p: any) => {
+        const ult = lastMovementOf(p);
+        const assunto = ult ? `A última movimentação foi em ${ult.d.toLocaleDateString('pt-BR')}: ${String(ult.title).slice(0, 140)}.` : 'Seu processo segue em acompanhamento.';
+        return { key: `proc-${p.id}`, label: 'Atualização do processo', hint: p.number, text: `Olá, ${primeiro}! Passando para atualizar você sobre o processo nº ${p.number}. ${assunto} Estamos acompanhando o andamento e, se houver alguma providência necessária, entrarei em contato. Qualquer dúvida, é só me chamar.` };
+      }),
+      ...keys.filter(k => LEAD_MESSAGES[k]).map(k => ({ key: k, label: LEAD_MESSAGES[k].label, text: LEAD_MESSAGES[k].fn(fake) })),
+      { key: 'livre', label: 'Mensagem em branco', text: `Olá, ${primeiro}! Tudo bem? ` }
+    ];
+    setComposer({ name: nome, phone: cli.phone || '', subtitle: 'Cliente', options });
   };
 
   const generateInstallments = (clientName: string, total: number, entrada: number, parcelas: number, firstDue: string) => {
@@ -2828,7 +2843,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                             <div className="space-y-2 pt-2">
                               <div className="flex flex-wrap justify-between items-center gap-2">
                                 <h5 className="font-serif font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Mensagem para o cliente</h5>
-                                <button type="button" onClick={() => prepareClientMessage(proc, ult)} className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Preparar mensagem para {String(proc.client || 'o cliente').split(' ')[0]}</button>
+                                <button type="button" onClick={() => openClientComposer((clients || []).find((c: any) => String(c.name || '').trim().toLowerCase() === String(proc.client || '').trim().toLowerCase()) || { name: proc.client, phone: '' })} className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Mensagem para {String(proc.client || 'o cliente').split(' ')[0]}</button>
                               </div>
                               <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>O texto é preparado a partir da última movimentação. Nada é enviado: você revisa e decide se abre o WhatsApp.</p>
                               {drafts.map((d: any) => renderDraftCard(d))}
@@ -2890,10 +2905,10 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                       
                       <button
                         type="button"
-                        onClick={() => { const initial = `Olá, ${cli.name}! Tudo bem? Estou entrando em contato para tratar do seu atendimento.`; const revised = window.prompt('Prepare e revise a mensagem. O sistema não enviará nada:', initial); if (revised === null) return; if (!revised.trim()) return; const phone = String(cli.phone || '').replace(/\D/g, ''); if (!phone) { window.alert('Cadastre um telefone válido para este cliente.'); return; } window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }}
+                        onClick={() => openClientComposer(cli)}
                         className="px-3 py-1.5 rounded-lg font-bold text-white flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 transition shadow-sm"
                       >
-                        <MessageCircle size={14} /> Preparar mensagem
+                        <MessageCircle size={14} /> Mensagem
                       </button>
                     </div>
                   </div>
@@ -3215,7 +3230,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                     <div className="flex flex-wrap items-center gap-2">
                       {Number(lead.estimatedValue) > 0 && <span className="text-xs font-bold" style={{ color: PALETTE.valoresReceber }}>R$ {Number(lead.estimatedValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
                       <select aria-label={`Etapa de ${lead.name}`} value={lead.stage} onChange={e => changeLeadStage(lead.id, e.target.value)} className="p-2 border rounded-lg text-[10px]" style={fieldStyle}>{FUNNEL_STAGES.map(stage => <option key={stage}>{stage}</option>)}</select>
-                      <select aria-label={`Mensagem para ${lead.name}`} value="" onChange={e => { if (e.target.value) sendLeadMessage(lead, e.target.value); }} className="p-2 border rounded-lg text-[10px]" style={fieldStyle}><option value="">Mensagem...</option>{Object.entries(LEAD_MESSAGES).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}</select>
+                      <button type="button" onClick={() => openLeadComposer(lead)} className="px-3 py-2 rounded-lg text-[10px] font-bold text-white flex items-center gap-1.5" style={{ backgroundColor: '#047857' }}><MessageCircle size={12} /> Mensagem</button>
                       {(lead.stage === 'Proposta enviada' || lead.stage === 'Consulta agendada') && <button type="button" onClick={() => convertLeadToCase(lead)} className="px-3 py-2 rounded-lg text-[10px] font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Contratou: abrir caso</button>}
                       <button title="Excluir lead" onClick={() => { if (window.confirm('Excluir este lead?')) setLeads(prev => prev.filter((x: any) => x.id !== lead.id)); }} className="p-2 rounded-lg" style={{ color: PALETTE.descontos }}><Trash2 size={14}/></button>
                     </div>
@@ -5610,6 +5625,8 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
           </div>
         </div>
       )}
+
+      {composer && <MessageComposer PALETTE={PALETTE} name={composer.name} phone={composer.phone} subtitle={composer.subtitle} options={composer.options} onClose={() => setComposer(null)} />}
 
       {/* MODAL DETALHADO DE EDIÇÃO DA TAREFA  */}
       {selectedTaskModal && (
