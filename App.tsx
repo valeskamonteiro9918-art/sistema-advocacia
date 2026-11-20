@@ -498,6 +498,7 @@ export default function App() {
 
   // Filters
   const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [catMenuOpen, setCatMenuOpen] = useState(false);
 
   // Selected Process for Financials
   const [selectedVerbasProcId, setSelectedVerbasProcId] = useState('1');
@@ -3151,22 +3152,30 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-3">
-                  <div className="flex gap-1 overflow-x-auto pb-1">
-                    {categories.map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`px-3 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border transition ${
-                          selectedCategory === cat ? 'text-white' : 'bg-white'
-                        }`}
-                        style={{
-                          backgroundColor: selectedCategory === cat ? PALETTE.bordoPrincipal : 'transparent',
-                          borderColor: PALETTE.linhasBordas
-                        }}
-                      >
-                        {cat}
-                      </button>
-                    ))}
+                  <div className="relative">
+                    <button type="button" onClick={() => setCatMenuOpen(o => !o)} aria-haspopup="listbox" aria-expanded={catMenuOpen} className="w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border text-xs font-bold shadow-sm transition hover:brightness-95" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>
+                      <span>Área: {selectedCategory === 'Todas' ? 'Todas as áreas' : selectedCategory}</span>
+                      <span aria-hidden="true">{catMenuOpen ? '▴' : '▾'}</span>
+                    </button>
+                    {catMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setCatMenuOpen(false)} aria-hidden="true" />
+                        <ul role="listbox" aria-label="Escolher a área" className="absolute left-0 right-0 mt-1 z-20 rounded-xl border shadow-lg overflow-hidden" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
+                          {categories.map((cat) => {
+                            const n = cat === 'Todas' ? templates.length : templates.filter((t) => t.category === cat).length;
+                            const on = selectedCategory === cat;
+                            return (
+                              <li key={cat} role="option" aria-selected={on}>
+                                <button type="button" onClick={() => { setSelectedCategory(cat); setCatMenuOpen(false); }} className="w-full flex items-center justify-between px-4 py-2.5 text-xs text-left hover:bg-black/5" style={{ fontWeight: on ? 700 : 500, color: on ? PALETTE.bordoPrincipal : PALETTE.textoPrincipal }}>
+                                  <span>{cat === 'Todas' ? 'Todas as áreas' : cat}</span>
+                                  <span style={{ color: PALETTE.textoApoio }}>{n}</span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    )}
                   </div>
 
                   <div className="space-y-2">
