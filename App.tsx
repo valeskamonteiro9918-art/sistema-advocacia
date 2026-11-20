@@ -1026,17 +1026,6 @@ export default function App() {
 
   // Financial selected process object
 
-  // Financial Totals Calculation
-  const financialTotals = processes.reduce(
-    (acc, p) => {
-      acc.causa += Number(p.value || 0);
-      acc.honorarios += Number(p.honorarios || 0);
-      acc.descontos += Number(p.descontos || 0);
-      return acc;
-    },
-    { causa: 0, honorarios: 0, descontos: 0 }
-  );
-
   // Handlers
   const handleAddProcess = (e) => {
     e.preventDefault();
@@ -1073,14 +1062,6 @@ export default function App() {
     setDeadlines(prev => [item, ...prev]);
     setNewDeadline({ title: '', client: '', process: '', dueDate: todayISO(), dueTime: '17:00', type: 'FATAL', responsible: '' });
     setIsNewDeadlineOpen(false);
-  };
-
-  const updateDeadlineStatus = (id, newStatus) => {
-    setDeadlines(prev => prev.map(d => d.id === id ? { 
-      ...d, 
-      status: newStatus, 
-      completed: newStatus === 'Finalizado' 
-    } : d));
   };
 
   const handleMouseEnterItem = (e, item) => {
@@ -1389,15 +1370,6 @@ export default function App() {
     setLeads(prev => prev.map((x: any) => x.id === lead.id ? { ...x, stage: 'Contratado', stageSince: new Date().toISOString() } : x));
     setModuleNotice('Cliente criado e tarefa de abertura gerada. Defina o plano de pagamento e cadastre o processo quando houver número.');
     setActiveTab('crm');
-  };
-
-  const handleAddFinancialEntry = (e) => {
-    e.preventDefault();
-    if (!financialDraft.title.trim() || Number(financialDraft.amount) <= 0) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
-    const item = { ...financialDraft, id: `fin-${Date.now()}`, amount: Number(financialDraft.amount || 0), createdAt: new Date().toISOString() };
-    setFinancialEntries(prev => [item, ...prev]);
-    setFinancialDraft({ title: '', kind: 'Receita', category: 'Honorários', client: '', amount: '', dueDate: '', status: 'Pendente' });
-    setModuleNotice('Lançamento financeiro cadastrado.');
   };
 
   const handleDocumentFile = (file) => {
@@ -1895,10 +1867,19 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     .filter((item) => new Date(`${item.dueDate}T00:00:00`) >= dashboardToday || item.type === 'FATAL')
     .sort((a, b) => new Date(`${a.dueDate}T00:00:00`).getTime() - new Date(`${b.dueDate}T00:00:00`).getTime())
     .slice(0, 3);
-  const dashboardChartProcesses = [...processes]
-    .sort((a, b) => Number(b.honorarios || 0) - Number(a.honorarios || 0))
+  const honorariosDoProcesso = (p: any) => {
+    const num = digitosOf(p.number);
+    const doCliente = processes.filter((q: any) => mesmoNome(q.client, p.client)).length;
+    const lanc = (financialEntries || []).filter((e: any) => e.kind === 'Receita' && e.category === 'Honorários' && (
+      (e.process && digitosOf(e.process) === num) || (!e.process && doCliente === 1 && mesmoNome(e.client, p.client))
+    ));
+    return lanc.length ? lanc.reduce((t: number, e: any) => t + Number(e.amount || 0), 0) : Number(p.honorarios || 0);
+  };
+  const dashboardChartProcesses = processes
+    .map((p: any) => ({ ...p, honorarios: honorariosDoProcesso(p) }))
+    .sort((a: any, b: any) => b.honorarios - a.honorarios)
     .slice(0, 6);
-  const dashboardChartMax = Math.max(1, ...dashboardChartProcesses.map((item) => Number(item.value || item.honorarios || 0)));
+  const dashboardChartMax = Math.max(1, ...dashboardChartProcesses.map((item: any) => Math.max(Number(item.value || 0), item.honorarios)));
   const PROCESS_AREAS = ['Trabalhista', 'Família', 'Cível', 'Outras áreas'];
   const processArea = (p: any) => {
     if (p && PROCESS_AREAS.includes(p.area)) return p.area;
@@ -1948,14 +1929,6 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
   const renderDraftCard = (draft: any) => (
 <div key={draft.id} className="p-3 rounded-lg border space-y-2" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoCartoes }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{draft.client} · {draft.process}</strong><span className="text-[10px] font-semibold" style={{ color: PALETTE.dourado }}>{draft.status}</span></div><p className="text-xs whitespace-pre-wrap" style={{ color: PALETTE.textoApoio }}>{draft.message}</p><div className="flex flex-wrap gap-2"><button onClick={() => { const revised = window.prompt('Revise ou edite a mensagem. Nada será enviado automaticamente:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Revisada por você' } : x)); }} className="px-3 py-1.5 rounded-lg border text-xs font-bold" style={{ borderColor: PALETTE.bordoPrincipal, color: PALETTE.bordoPrincipal }}>Revisar mensagem</button><button onClick={() => { const revised = window.prompt('Confira o texto final. Para abrir o WhatsApp, confirme o texto abaixo:', draft.message); if (revised === null) return; setClientMessageDrafts(prev => prev.map(x => x.id === draft.id ? { ...x, message: revised, status: 'Aprovada para envio manual' } : x)); const phone = String(draft.phone || '').replace(/\D/g, ''); if (phone) window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(revised)}`, '_blank', 'noopener,noreferrer'); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#166534' }}>Abrir WhatsApp após revisar</button></div></div>
   );
-  const prepareClientMessage = (proc: any, ult: any) => {
-    const cliente = (clients || []).find((c: any) => String(c.name || '').trim().toLowerCase() === String(proc.client || '').trim().toLowerCase());
-    const primeiro = String(proc.client || '').split(' ')[0];
-    const assunto = ult ? `A última movimentação foi em ${ult.d.toLocaleDateString('pt-BR')}: ${String(ult.title).slice(0, 140)}.` : 'Seu processo segue em acompanhamento.';
-    const message = `Olá, ${primeiro}! Passando para atualizar você sobre o processo nº ${proc.number}. ${assunto} Estamos acompanhando o andamento e, se houver alguma providência necessária, entrarei em contato. Qualquer dúvida, é só me chamar.`;
-    setClientMessageDrafts((prev: any) => [{ id: `draft-manual-${Date.now()}`, process: proc.number, client: proc.client, phone: cliente?.phone || '', message, status: 'Aguardando sua revisão', createdAt: new Date().toISOString() }, ...(Array.isArray(prev) ? prev : [])]);
-    if (!cliente?.phone) window.alert('Este cliente está sem telefone cadastrado. O texto foi preparado, mas para abrir o WhatsApp cadastre o telefone em Clientes.');
-  };
   const comarcasConhecidas = Array.from(new Set(processes.map((p: any) => contextoDoProcesso(p, ufPadrao).comarca).filter(Boolean)));
   const LocalProcesso = ({ data, onChange }: { data: any; onChange: (patch: any) => void }) => {
     const auto = contextoDoProcesso({ ...data, uf: '', comarca: '' }, ufPadrao);
@@ -2581,7 +2554,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   <section className="rounded-2xl border p-4 md:p-5 min-w-0" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}>
                     <div className="mb-3">
                       <h4 className="font-serif text-base" style={{ color: PALETTE.textoPrincipal }}>Honorários por processo</h4>
-                      <p className="text-[10px] mt-0.5" style={{ color: PALETTE.textoApoio }}>Comparativo do valor da causa e honorários cadastrados</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: PALETTE.textoApoio }}>Comparativo do valor da causa e honorários lançados no Financeiro</p>
                     </div>
                     {dashboardChartProcesses.length ? (
                       <>
