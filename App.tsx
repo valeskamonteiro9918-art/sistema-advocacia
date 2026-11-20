@@ -813,6 +813,7 @@ export default function App() {
     setProcesses((prev: any[]) => prev.map((p) => p.monitorSince ? p : { ...p, monitorSince: hojeISO }));
   }, [dataHydrated, processes]);
   const [sharedOfficeId, setSharedOfficeId] = useState<string | null>(null);
+  const [cloudState, setCloudState] = useState<'local' | 'conectando' | 'ok' | 'salvando' | 'erro' | 'conflito' | 'semvinculo'>('local');
   const [persistenceStatus, setPersistenceStatus] = useState('Carregando dados...');
   const [lastSavedAt, setLastSavedAt] = useState('');
   const localSnapshotRef = useRef<any | null>(null);
@@ -911,6 +912,7 @@ export default function App() {
     let active = true;
     const hydrateSharedOffice = async () => {
       setPersistenceStatus('Verificando acesso ao escritório...');
+      setCloudState('conectando');
       try {
         const { data: membership, error: membershipError } = await supabase
           .from('office_workspace_members')
@@ -919,7 +921,7 @@ export default function App() {
           .maybeSingle();
         if (membershipError) throw membershipError;
         if (!membership?.office_id) {
-          if (active) setPersistenceStatus('Esta conta ainda não está vinculada ao escritório');
+          if (active) { setPersistenceStatus('Esta conta ainda não está vinculada ao escritório'); setCloudState('semvinculo'); }
           return;
         }
 
@@ -951,9 +953,10 @@ export default function App() {
         setSharedOfficeId(membership.office_id);
         if (sharedState.saved_at) setLastSavedAt(sharedState.saved_at);
         setPersistenceStatus('Escritório compartilhado conectado');
+        setCloudState('ok');
       } catch (error) {
         console.error('Não foi possível conectar ao escritório compartilhado:', error);
-        if (active) setPersistenceStatus('Falha na conexão compartilhada — dados locais preservados');
+        if (active) { setPersistenceStatus('Falha na conexão compartilhada — dados locais preservados'); setCloudState('erro'); }
       }
     };
     void hydrateSharedOffice();
@@ -974,6 +977,7 @@ export default function App() {
     const timer = window.setTimeout(async () => {
       const payload = buildOfficePayload();
       const expectedVersion = cloudVersionRef.current;
+      setCloudState('salvando');
       try {
         if (!expectedVersion) throw new Error('Versão da nuvem não identificada; atualização bloqueada para evitar sobrescrever dados.');
         const { data: updated, error } = await supabase
@@ -1001,6 +1005,7 @@ export default function App() {
             applyPersistedOfficeData(typeof latest.payload === 'string' ? JSON.parse(latest.payload) : latest.payload);
             setLastSavedAt(latest.saved_at);
             setPersistenceStatus('Outra administradora salvou primeiro. Sua alteração foi preservada nesta instalação; confira antes de reaplicá-la.');
+            setCloudState('conflito');
           } else {
             throw new Error('Não foi possível recuperar a versão atual do escritório.');
           }
@@ -1010,9 +1015,10 @@ export default function App() {
         cloudVersionRef.current = updated.saved_at;
         setLastSavedAt(updated.saved_at);
         setPersistenceStatus('Salvo na nuvem');
+        setCloudState('ok');
       } catch (error) {
         console.error('Falha ao salvar no escritório compartilhado:', error);
-        if (active) setPersistenceStatus('Falha ao salvar na nuvem compartilhada — alterações locais preservadas');
+        if (active) { setPersistenceStatus('Falha ao salvar na nuvem compartilhada — alterações locais preservadas'); setCloudState('erro'); }
       } finally {
         pendingCloudChangesRef.current = false;
       }
@@ -1041,7 +1047,7 @@ export default function App() {
           skipNextCloudSaveRef.current = true;
           applyPersistedOfficeData(parsed);
           setLastSavedAt(data.saved_at);
-          setPersistenceStatus('Dados atualizados com alterações do escritório');
+          setPersistenceStatus('Dados atualizados com alterações do escritório'); setCloudState('ok');
         }
       } catch (error) {
         console.warn('Não foi possível verificar atualizações do escritório:', error);
@@ -2286,10 +2292,30 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
             <p className="text-xs" style={{ color: MENU_PALETTE.subtitulo }}>
               {me ? me.name : 'Dra. Valeska Monteiro'} • Serra / ES
             </p>
-            <p className="text-[10px] mt-1 flex items-center gap-1" style={{ color: isDarkMode ? '#9CA3AF' : '#D1D5DB' }} title={lastSavedAt ? `Último salvamento: ${new Date(lastSavedAt).toLocaleString('pt-BR')}` : 'Os dados são salvos automaticamente neste navegador'}>
-              <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: persistenceStatus.includes('Erro') || persistenceStatus.includes('Falha') ? '#F5EEE9' : '#34D399' }} />
-              {persistenceStatus}{lastSavedAt ? ` · ${new Date(lastSavedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
-            </p>
+            {(() => {
+              const hora = lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+              const info: Record<string, { cor: string; txt: string }> = {
+                local: { cor: '#9CA3AF', txt: 'Salvo neste aparelho' },
+                conectando: { cor: '#9CA3AF', txt: 'Conectando à nuvem do escritório...' },
+                ok: { cor: '#34D399', txt: `Nuvem conectada${hora ? ` · salvo às ${hora}` : ''}` },
+                salvando: { cor: '#FBBF24', txt: 'Salvando na nuvem...' },
+                erro: { cor: '#F87171', txt: 'Sem conexão com a nuvem · salvo neste aparelho' },
+                conflito: { cor: '#FBBF24', txt: 'Outra advogada salvou primeiro · confira as alterações' },
+                semvinculo: { cor: '#F87171', txt: 'Esta conta não está vinculada ao escritório' }
+              };
+              const c = info[cloudState] || info.local;
+              const fixas = ['Carregando', 'Dados locais', 'Salvo neste', 'Verificando acesso', 'Escritório compartilhado', 'Salvo na nuvem', 'Falha na conexão', 'Falha ao salvar', 'Esta conta ainda', 'Outra administradora', 'Dados atualizados'];
+              const extra = fixas.some(p => persistenceStatus.startsWith(p)) ? '' : persistenceStatus;
+              return (
+                <>
+                  <p role="status" className="text-[10px] mt-1 flex items-center gap-1" style={{ color: isDarkMode ? '#9CA3AF' : '#D1D5DB' }} title={persistenceStatus}>
+                    <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.cor }} />
+                    {c.txt}
+                  </p>
+                  {extra && <p className="text-[10px] mt-0.5" style={{ color: isDarkMode ? '#9CA3AF' : '#D1D5DB' }}>{extra}</p>}
+                </>
+              );
+            })()}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
