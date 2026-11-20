@@ -11,6 +11,7 @@ import PrazosView from './prazosView';
 import MessageComposer, { MsgOption } from './mensagens';
 import ClientFinanceModal from './financeiroCliente';
 import NamesTool from './padronizar';
+import { fixCase } from './texto';
 import FinanceModule, { financeSummary, brl as brlFmt } from './financeiro';
 import {
   Briefcase,
@@ -1059,6 +1060,8 @@ export default function App() {
     const item = {
       id: Date.now().toString(),
       ...newProcess,
+      client: fixCase(newProcess.client),
+      action: fixCase(newProcess.action),
       value: Number(newProcess.value || 0),
       honorarios: Number(newProcess.honorarios || 0),
       descontos: Number(newProcess.descontos || 0)
@@ -1071,7 +1074,7 @@ export default function App() {
   const handleAddClient = (e) => {
     e.preventDefault();
     if (!newClient.name) return;
-    const item = { id: Date.now().toString(), ...newClient };
+    const item = { id: Date.now().toString(), ...newClient, name: fixCase(newClient.name) };
     setClients(prev => [item, ...prev]);
     setNewClient({ name: '', type: 'Pessoa Física', document: '', phone: '', email: '', status: 'Ativo' });
     setIsNewClientOpen(false);
@@ -1080,7 +1083,7 @@ export default function App() {
   const handleAddDeadline = (e) => {
     e.preventDefault();
     if (!newDeadline.title) return;
-    const item = { id: Date.now().toString(), ...newDeadline, completed: false, status: 'Em Andamento' };
+    const item = { id: Date.now().toString(), ...newDeadline, title: fixCase(newDeadline.title), client: fixCase(newDeadline.client), completed: false, status: 'Em Andamento' };
     setDeadlines(prev => [item, ...prev]);
     setNewDeadline({ title: '', client: '', process: '', dueDate: todayISO(), dueTime: '17:00', type: 'FATAL', responsible: '' });
     setIsNewDeadlineOpen(false);
@@ -1128,10 +1131,10 @@ export default function App() {
     if (!editingItem) return;
     const { type, data } = editingItem;
     if (type === 'process') {
-      const updated = { ...data, value: Number(data.value || 0), honorarios: Number(data.honorarios || 0), descontos: Number(data.descontos || 0) };
+      const updated = { ...data, client: fixCase(data.client), action: fixCase(data.action), value: Number(data.value || 0), honorarios: Number(data.honorarios || 0), descontos: Number(data.descontos || 0) };
       setProcesses(prev => prev.map(item => item.id === updated.id ? updated : item));
     } else if (type === 'client') {
-      setClients(prev => prev.map(item => item.id === data.id ? data : item));
+      setClients(prev => prev.map(item => item.id === data.id ? { ...data, name: fixCase(data.name) } : item));
     }
     setEditingItem(null);
   };
@@ -1252,7 +1255,7 @@ export default function App() {
     if (op && known.some(n => norm(n) === op) && !window.confirm('Atenção: a outra parte já consta como contato ou cliente do escritório (possível conflito de interesses). Continuar o cadastro?')) return;
     if (leads.some((l: any) => norm(l.otherParty) && norm(l.otherParty) === norm(leadDraft.name)) && !window.confirm('Atenção: este nome já aparece como outra parte em outro contato (possível conflito de interesses). Continuar o cadastro?')) return;
     const nowIso = new Date().toISOString();
-    const item = { ...leadDraft, id: `lead-${Date.now()}`, estimatedValue: Number(leadDraft.estimatedValue || 0), createdAt: nowIso, stageSince: nowIso, docs: {}, responseAt: nowIso };
+    const item = { ...leadDraft, name: fixCase(leadDraft.name), id: `lead-${Date.now()}`, estimatedValue: Number(leadDraft.estimatedValue || 0), createdAt: nowIso, stageSince: nowIso, docs: {}, responseAt: nowIso };
     setLeads(prev => [item, ...prev]);
     setIsLeadFormOpen(false);
     setLeadDraft({ name: '', phone: '', email: '', area: 'Família', source: 'Indicação', stage: 'Novo contato', estimatedValue: '', nextAction: '', notes: '', urgency: 'Verde', caseType: 'Divórcio', otherParty: '', nextActionDate: '', lostReason: '', originalMessage: '', city: '', existingProcess: '', childrenOrAssets: '', riskDetails: '', conflictStatus: 'Pendente de conferência', situation: 'Aguardando atendimento', responseAt: '' });
@@ -3320,7 +3323,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 <label className="flex items-start gap-3 p-3 rounded-xl border text-xs" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><input type="checkbox" checked={Boolean(officeSettings.lgpdConsent)} onChange={e => setOfficeSettings(prev => ({ ...prev, lgpdConsent: e.target.checked, lgpdAcceptedAt: e.target.checked ? new Date().toISOString() : '' }))} /><span><strong>Registro de ciência do aviso de privacidade e tratamento de dados.</strong><br/>Este controle interno registra a ciência no navegador; não substitui o aviso de privacidade, base legal, contrato de operador ou demais medidas exigidas pela LGPD.</span></label>
                 <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={toggleTheme} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>{isDarkMode ? <Sun size={13}/> : <Moon size={13}/>} Alternar tema</button><button type="submit" className="px-4 py-2 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar configurações</button></div>
               </form>
-              <NamesTool PALETTE={PALETTE} clients={clients} setClients={setClients} processes={processes} setProcesses={setProcesses} deadlines={deadlines} setDeadlines={setDeadlines} entries={financialEntries} setEntries={setFinancialEntries} notify={setModuleNotice} />
+              <NamesTool PALETTE={PALETTE} clients={clients} setClients={setClients} processes={processes} setProcesses={setProcesses} deadlines={deadlines} setDeadlines={setDeadlines} entries={financialEntries} setEntries={setFinancialEntries} leads={leads} setLeads={setLeads} notify={setModuleNotice} />
               <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Backup e restauração</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>Exporte os registros para um arquivo JSON ou restaure um backup anterior. Guarde o arquivo de forma segura: ele pode conter dados pessoais e informações confidenciais.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={downloadBackup} className="px-4 py-2 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Download size={14}/> Exportar backup</button><button type="button" onClick={() => document.getElementById('vm-backup-import')?.click()} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><Upload size={14}/> Importar backup</button><input id="vm-backup-import" type="file" accept="application/json,.json" className="hidden" onChange={handleImportBackup}/></div><p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os dados já existentes podem continuar apenas no estado da aplicação; faça o backup antes de atualizar o código. O armazenamento permanente e multiusuário precisa ser configurado no backend.</p></section>
             </div>
           )}

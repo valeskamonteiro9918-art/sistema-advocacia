@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { brl, todayLocal, isMemo } from './financeiro';
+import { fixCase } from './texto';
 
 // Financeiro dentro do cliente: plano de pagamento padronizado (total, entrada e número de parcelas),
 // lista de parcelas com "recebi", edição e cobrança.
@@ -84,7 +85,7 @@ export default function ClientFinanceModal({ PALETTE, client, entries, setEntrie
   const startEdit = (e: any) => { setEditId(e.id); setEd({ title: e.title || '', amount: String(e.amount ?? ''), dueDate: e.dueDate || '' }); };
   const saveEdit = () => {
     if (!ed.title.trim() || !(Number(ed.amount) > 0)) { window.alert('Informe a descrição e um valor maior que zero.'); return; }
-    patch(editId as string, { title: ed.title.trim(), amount: Number(ed.amount), dueDate: ed.dueDate });
+    patch(editId as string, { title: fixCase(ed.title.trim()), amount: Number(ed.amount), dueDate: ed.dueDate });
     setEditId(null);
   };
   const cobranca = () => {
