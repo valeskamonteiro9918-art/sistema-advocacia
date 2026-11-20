@@ -44,7 +44,9 @@ import {
   Paperclip,
   CheckSquare,
   MessageSquare,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 const MENU_PALETTE = {
@@ -442,6 +444,7 @@ export default function App() {
 
   // Modals & Creation States
   const [isNewProcessOpen, setIsNewProcessOpen] = useState(false);
+  const [openProcessId, setOpenProcessId] = useState<string | null>(null);
   const [processSort, setProcessSort] = useState<'area' | 'movimentacao' | 'numero' | 'cliente'>(() => {
     try { const v = localStorage.getItem('vm-process-sort'); return (v === 'movimentacao' || v === 'numero' || v === 'cliente') ? v : 'area'; } catch { return 'area'; }
   });
@@ -2731,7 +2734,8 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                   {processSort === 'area' && (idx === 0 || processArea(arr[idx - 1]) !== processArea(proc)) && (
                     <h4 className="text-[11px] font-bold uppercase tracking-wider pt-2" style={{ color: PALETTE.bordoPrincipal }}>{processArea(proc)} · {arr.filter((x: any) => processArea(x) === processArea(proc)).length}</h4>
                   )}
-                  <div className="p-4 rounded-xl border bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <div className="p-4 rounded-xl border bg-white shadow-sm space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs font-bold" style={{ color: PALETTE.textoPrincipal }}>{proc.number}</span>
@@ -2741,25 +2745,9 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                         <button onClick={() => { if (window.confirm('Excluir este processo?')) setProcesses(prev => prev.filter(p => p.id !== proc.id)); }} className="p-1 hover:bg-amber-50 rounded" title="Excluir processo">
                           <Trash2 size={13} className="text-amber-700" />
                         </button>
-                        <button onClick={() => handleRegisterMovement(proc)} className="px-2 py-0.5 rounded text-[10px] font-bold border hover:bg-black/5" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }} title="Registrar movimentação ou diligência feita neste processo">
-                          Registrar movimentação
-                        </button>
                       </div>
                       <h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>{proc.client}</h4>
                       <p className="text-xs" style={{ color: PALETTE.textoApoio }}>{proc.action} • {proc.court}</p>
-                      {(() => {
-                        const ult = lastMovementOf(proc);
-                        if (!ult) {
-                          const desde = dayFromValue(proc.monitorSince);
-                          return <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>Última movimentação: nenhuma localizada no Gmail nem no CNJ{desde ? ` (contagem desde ${desde.toLocaleDateString('pt-BR')})` : ''}.</p>;
-                        }
-                        const parado = ult.dias >= INACTIVITY_LIMIT_DAYS;
-                        return (
-                          <p className="text-[11px]" style={{ color: parado ? '#9A3412' : PALETTE.textoApoio }}>
-                            <strong>Última movimentação:</strong> {ult.d.toLocaleDateString('pt-BR')} ({ult.dias <= 0 ? 'hoje' : ult.dias === 1 ? 'há 1 dia' : `há ${ult.dias} dias`}) · {String(ult.title).slice(0, 140)}{ult.source ? ` · Fonte: ${ult.source}` : ''}
-                          </p>
-                        );
-                      })()}
                     </div>
 
                     <div className="text-right flex sm:flex-col justify-between w-full sm:w-auto items-center sm:items-end">
@@ -2771,14 +2759,43 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                       </span>
                     </div>
                   </div>
+                  {(() => {
+                    const aberto = openProcessId === proc.id;
+                    const movs = processMovements
+                      .filter((m: any) => onlyDigits(m.process) === onlyDigits(proc.number))
+                      .slice()
+                      .sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+                    const ult = lastMovementOf(proc);
+                    return (
+                      <>
+                        <button type="button" aria-expanded={aberto} onClick={() => setOpenProcessId(aberto ? null : proc.id)} className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-xs font-bold hover:bg-black/5 transition" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.bordoPrincipal }}>
+                          <span>{aberto ? 'Fechar processo' : 'Abrir processo'}<span className="font-normal ml-2" style={{ color: ult && ult.dias >= INACTIVITY_LIMIT_DAYS ? '#9A3412' : PALETTE.textoApoio }}>{movs.length} movimentaç{movs.length === 1 ? 'ão' : 'ões'}{ult ? ` · última em ${ult.d.toLocaleDateString('pt-BR')}` : ''}</span></span>
+                          {aberto ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </button>
+                        {aberto && (
+                          <div className="space-y-2 pt-1">
+                            <div className="flex flex-wrap justify-between items-center gap-2">
+                              <h5 className="font-serif font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Movimentações do processo</h5>
+                              <button onClick={() => handleRegisterMovement(proc)} className="px-3 py-1.5 rounded-lg text-[11px] font-bold border hover:bg-black/5" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoApoio }}>Registrar movimentação</button>
+                            </div>
+                            {movs.length === 0 ? (
+                              (() => { const desde = dayFromValue(proc.monitorSince); return <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Nenhuma movimentação localizada no Gmail nem no CNJ{desde ? ` (contagem desde ${desde.toLocaleDateString('pt-BR')})` : ''}.</p>; })()
+                            ) : movs.map((mov: any) => (
+                              <div key={mov.id} className="p-3 rounded-lg border space-y-1" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
+                                <div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.title}</strong><span className="text-[10px]" style={{ color: PALETTE.textoApoio }}>{dayFromValue(mov.date)?.toLocaleDateString('pt-BR') || String(mov.date || '').slice(0, 10)}</span></div>
+                                {mov.source && <p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>Fonte: {mov.source}</p>}
+                                {mov.description && <p className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.description}</p>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  </div>
                   </React.Fragment>
                 ))}
               </div>
-
-              <section className="rounded-xl border p-4 space-y-3" style={{ borderColor: PALETTE.linhasBordas, backgroundColor: PALETTE.fundoPagina }}>
-                <div><h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Histórico de movimentações</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>Publicações recebidas pelo Gmail são registradas aqui, vinculadas ao número do processo.</p></div>
-                {processMovements.length === 0 ? <p className="text-xs" style={{ color: PALETTE.textoApoio }}>Nenhuma movimentação importada ainda.</p> : processMovements.slice(0, 30).map((mov: any) => <div key={mov.id} className="p-3 rounded-lg border bg-white space-y-1" style={{ borderColor: PALETTE.linhasBordas }}><div className="flex flex-wrap justify-between gap-2"><strong className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.title}</strong><span className="text-[10px]" style={{ color: PALETTE.textoApoio }}>{String(mov.date || '').slice(0, 10)}</span></div><p className="text-[11px]" style={{ color: PALETTE.textoApoio }}>{mov.client} · {mov.process} · Fonte: {mov.source}</p><p className="text-xs" style={{ color: PALETTE.textoPrincipal }}>{mov.description}</p></div>)}
-              </section>
 
               <section className="rounded-xl border p-4 space-y-3" style={{ borderColor: PALETTE.linhasBordas }}>
                 <div><h4 className="font-serif font-bold text-base" style={{ color: PALETTE.textoPrincipal }}>Mensagens preparadas para sua revisão</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>O sistema apenas prepara o texto. Nada é enviado. Você revisa, altera e decide se deseja abrir o WhatsApp.</p></div>
