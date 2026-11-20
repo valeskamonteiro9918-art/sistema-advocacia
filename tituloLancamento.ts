@@ -29,3 +29,26 @@ export const lerTitulo = (title: string, kind: string, client: string): TituloDr
   if (/^entrada/i.test(head)) return { tipo: 'Entrada', pn: '1', pt: '1', outro: '' };
   return { tipo: 'Outro', pn: '1', pt: '1', outro: head };
 };
+
+// Devolve o título no padrão quando o antigo é claramente de um tipo conhecido; senão null (não mexe).
+export const normalizarTitulo = (title: string, kind: string, client: string): string | null => {
+  const raw = String(title || '').trim();
+  if (!raw) return null;
+  const c = (client || '').trim();
+  const head = raw.split('·')[0].trim();
+  const resto = raw.split('·').slice(1).map(x => x.trim()).filter(Boolean);
+  const m = head.match(/^(?:honor[aá]rios,?\s*)?parcela\s*(\d+)\s*\/\s*(\d+)/i) || head.match(/^(\d+)\s*\/\s*(\d+)/);
+  let base = '';
+  if (m) base = `Parcela ${Number(m[1])}/${Number(m[2])}`;
+  else if (/^(?:honor[aá]rios,?\s*)?entrada\s*$/i.test(head)) base = 'Entrada';
+  else {
+    const lista = kind === 'Despesa' ? TIPOS_SAIDA : TIPOS_ENTRADA;
+    const hit = lista.find(x => x !== 'Outro' && x !== 'Parcela' && x.toLowerCase() === head.toLowerCase());
+    if (!hit) return null;
+    base = hit;
+  }
+  // se depois do "·" há algo além do nome do cliente, não mexe
+  if (resto.length && !(resto.length === 1 && c && resto[0].toLowerCase() === c.toLowerCase())) return null;
+  const novo = c ? `${base} · ${c}` : base;
+  return novo === raw ? null : novo;
+};
