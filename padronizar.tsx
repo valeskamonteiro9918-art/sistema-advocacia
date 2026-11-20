@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { fixCase } from './texto';
+import { normalizarTitulo } from './tituloLancamento';
 
 // Padroniza o nome dos clientes: o mesmo nome que está no cadastro passa a valer em processos, prazos e lançamentos.
 // Só propõe quando o nome curto está contido, sem dúvida, em UM único cliente cadastrado. Nada muda sem você aplicar.
@@ -86,8 +87,10 @@ export default function NamesTool({ PALETTE, clients, setClients, processes, set
     }));
     return [...seen.entries()].map(([k, v]) => ({ key: k, ...v }));
   }, [clients, processes, deadlines, entries, leads, plan]);
+  const titleFixes = useMemo(() => entries.map((e: any) => ({ id: e.id, from: String(e.title || ''), to: normalizarTitulo(e.title, e.kind, e.client) })).filter((t: any) => t.to) as { id: string; from: string; to: string }[], [entries]);
+  const isTit = (id: string) => pick[`t:${id}`] !== false;
   const isCase = (k: string) => pick[`c:${k}`] !== false;
-  const total = plan.renames.length + plan.missing.length + caseFixes.length;
+  const total = plan.renames.length + plan.missing.length + caseFixes.length + titleFixes.length;
   const isRen = (r: Rename) => pick[`r:${r.from}`] !== false;
   const isNew = (n: string) => pick[`n:${n}`] === true;
 
@@ -96,6 +99,8 @@ export default function NamesTool({ PALETTE, clients, setClients, processes, set
     plan.renames.filter(isRen).forEach(r => map.set(r.from, r.to));
     const fix = (list: any[]) => list.map(x => (map.has(String(x.client ?? '')) ? { ...x, client: map.get(String(x.client)) } : x));
     if (map.size) { setProcesses((p: any[]) => fix(p)); setDeadlines((p: any[]) => fix(p)); setEntries((p: any[]) => fix(p)); }
+    const tmap = new Map(titleFixes.filter(t => isTit(t.id)).map(t => [t.id, t.to]));
+    if (tmap.size) setEntries((p: any[]) => p.map(e => (tmap.has(e.id) ? { ...e, title: tmap.get(e.id) } : e)));
     const chosen = caseFixes.filter(c => isCase(c.key));
     if (chosen.length) {
       const setters: any = { clients: setClients, processes: setProcesses, deadlines: setDeadlines, entries: setEntries, leads: setLeads };
@@ -105,7 +110,7 @@ export default function NamesTool({ PALETTE, clients, setClients, processes, set
     }
     const novos = plan.missing.filter(m => isNew(m.name)).map((m, i) => ({ id: `cli-${Date.now()}-${i}`, name: m.name, type: 'Pessoa Física', document: '', phone: '', email: '', status: 'Ativo' }));
     if (novos.length) setClients((p: any[]) => [...novos, ...p]);
-    notify(`${map.size} nome(s) padronizado(s), ${chosen.length} texto(s) ajustado(s) e ${novos.length} cliente(s) cadastrado(s).`);
+    notify(`${map.size} nome(s) padronizado(s), ${tmap.size} título(s) de lançamento, ${chosen.length} texto(s) ajustado(s) e ${novos.length} cliente(s) cadastrado(s).`);
     setPick({});
   };
 
@@ -129,6 +134,17 @@ export default function NamesTool({ PALETTE, clients, setClients, processes, set
                 <label key={r.from} className="flex items-start gap-2 p-2 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas }}>
                   <input type="checkbox" checked={isRen(r)} onChange={e => setPick(p => ({ ...p, [`r:${r.from}`]: e.target.checked }))} className="mt-0.5" />
                   <span><b>"{r.from}"</b> → <b>{r.to}</b><span className="block text-[10px]" style={{ color: PALETTE.textoApoio }}>em {r.where.join(', ')}{r.byFirst ? ' · mesmo primeiro nome, confira se é a mesma pessoa' : ''}</span></span>
+                </label>
+              ))}
+            </div>
+          )}
+          {titleFixes.length > 0 && (
+            <div className="space-y-2">
+              <p className="font-bold">Títulos dos lançamentos no padrão "Parcela 1/5 · Cliente"</p>
+              {titleFixes.map(t => (
+                <label key={t.id} className="flex items-start gap-2 p-2 rounded-lg border" style={{ borderColor: PALETTE.linhasBordas }}>
+                  <input type="checkbox" checked={isTit(t.id)} onChange={e => setPick(p => ({ ...p, [`t:${t.id}`]: e.target.checked }))} className="mt-0.5" />
+                  <span><b>"{t.from}"</b> → <b>{t.to}</b></span>
                 </label>
               ))}
             </div>
