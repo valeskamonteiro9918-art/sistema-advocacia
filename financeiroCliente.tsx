@@ -169,7 +169,7 @@ export default function ClientFinanceModal({ PALETTE, client, entries, setEntrie
                     <p className="text-[11px] mt-0.5" style={{ color: late ? PALETTE.descontos : PALETTE.textoApoio }}>{e.kind === 'Despesa' ? 'Despesa' : e.category} · vence {fmt(e.dueDate)}{done ? ` · recebido${e.paidAt ? ' em ' + fmt(e.paidAt) : ''}` : late ? ' · VENCIDO' : ''}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                    <span className="text-xs font-bold font-mono" style={{ color: e.kind === 'Despesa' ? PALETTE.descontos : PALETTE.valoresReceber }}>{e.kind === 'Despesa' ? '− ' : ''}{brl(e.amount)}</span>
+                    <span className="w-[130px] text-right text-sm font-bold font-mono whitespace-nowrap" style={{ color: e.kind === 'Despesa' ? PALETTE.descontos : PALETTE.valoresReceber }}>{e.kind === 'Despesa' ? '− ' : '+ '}{brl(e.amount)}</span>
                     {done ? <button type="button" onClick={() => undo(e)} className={ghost} style={{ borderColor: PALETTE.linhasBordas }}>Desfazer</button> : <button type="button" onClick={() => markPaid(e)} className="px-3 py-2 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#047857' }}>Recebi</button>}
                     <button type="button" onClick={() => startEdit(e)} className={ghost} style={{ borderColor: PALETTE.linhasBordas }}>Editar</button>
                     <button type="button" aria-label="Excluir lançamento" onClick={() => remove(e)} className={ghost} style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.descontos }}>Excluir</button>
