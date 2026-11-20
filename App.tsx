@@ -408,16 +408,23 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    try { ['vm-nav-tab', 'vm-nav-agenda', 'vm-nav-workspace', 'vm-fin-tab'].forEach(k => sessionStorage.removeItem(k)); } catch { /* sem armazenamento */ }
     await supabase.auth.signOut();
   };
 
   // --- CÓDIGO ORIGINAL INTACTO ---
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Ao atualizar a página (F5), continua na mesma tela. O Dashboard só abre no primeiro acesso da sessão.
+  const NAV_TABS = ['dashboard', 'processes', 'agenda', 'tasks', 'crm', 'leads', 'finances', 'documents', 'workspace', 'reports', 'settings'];
+  const readNav = (key: string, fallback: string, allowed: string[]) => { try { const v = sessionStorage.getItem(key); return v && allowed.includes(v) ? v : fallback; } catch { return fallback; } };
+  const [activeTab, setActiveTab] = useState(() => readNav('vm-nav-tab', 'dashboard', NAV_TABS));
+  useEffect(() => { try { sessionStorage.setItem('vm-nav-tab', activeTab); } catch { /* sem armazenamento */ } }, [activeTab]);
   const [dashboardSearch, setDashboardSearch] = useState('');
-  const [agendaSubTab, setAgendaSubTab] = useState('prazos');
+  const [agendaSubTab, setAgendaSubTab] = useState(() => readNav('vm-nav-agenda', 'prazos', ['prazos', 'agenda', 'varredura']));
+  useEffect(() => { try { sessionStorage.setItem('vm-nav-agenda', agendaSubTab); } catch { /* sem armazenamento */ } }, [agendaSubTab]);
   const [scanFilter, setScanFilter] = useState('pendentes');
   const [scanSearch, setScanSearch] = useState('');
-  const [workspaceSubTab, setWorkspaceSubTab] = useState('modelos');
+  const [workspaceSubTab, setWorkspaceSubTab] = useState(() => readNav('vm-nav-workspace', 'modelos', ['modelos', 'calculadoras', 'verbas']));
+  useEffect(() => { try { sessionStorage.setItem('vm-nav-workspace', workspaceSubTab); } catch { /* sem armazenamento */ } }, [workspaceSubTab]);
 
   // Módulos novos: captação, financeiro, documentos, relatórios e configurações.
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
