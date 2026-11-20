@@ -16,7 +16,7 @@ type Props = {
   processes: any[];
   team: Member[];
   me: Member | null;
-  businessDaysUntil: (iso: string) => number | null;
+  businessDaysUntil: (iso: string, d?: any) => number | null;
   onOpen: (item: any) => void;
   onNew: () => void;
 };
@@ -70,7 +70,7 @@ export default function PrazosView({ PALETTE, deadlines, processes, team, me, bu
     if (isDone) when = 'Cumprido';
     else if (diff !== null) when = diff < 0 ? `Vencido há ${-diff} dia${diff === -1 ? '' : 's'}` : diff === 0 ? 'Hoje' : diff === 1 ? 'Amanhã' : `em ${diff} dias`;
     let uteis = '';
-    if (!isDone && diff !== null && diff > 1) { try { const n = businessDaysUntil(d.dueDate); if (Number.isFinite(n)) uteis = `${n} dias úteis`; } catch { /* sem estimativa */ } }
+    if (!isDone && diff !== null && diff > 1) { try { const n = businessDaysUntil(d.dueDate, d); if (Number.isFinite(n)) uteis = `${n} dias úteis`; } catch { /* sem estimativa */ } }
     const fatal = d.type === 'FATAL';
     const where = [d.client, d.process ? `Proc. ${d.process}` : '', d.court].filter(Boolean).join(' · ');
     return (
@@ -153,7 +153,7 @@ export default function PrazosView({ PALETTE, deadlines, processes, team, me, bu
         </section>
       )}
 
-      <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os dias úteis são uma estimativa: descontam feriados nacionais, Carnaval, Paixão de Cristo, Corpus Christi, Nossa Senhora da Penha (ES) e o recesso forense de 20/12 a 20/01. Feriados municipais e suspensões específicas do tribunal não estão incluídos. Confira sempre a contagem no sistema oficial.</p>
+      <p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os dias úteis são uma estimativa e seguem o estado e a comarca de cada processo: descontam fins de semana, feriados nacionais, feriados do estado, Carnaval, Paixão de Cristo, Corpus Christi, o recesso de 20/12 a 20/01 e os feriados municipais que você cadastrou em Configurações. Suspensões do tribunal só entram se você cadastrar. Confira sempre a contagem no sistema oficial.</p>
     </div>
   );
 }

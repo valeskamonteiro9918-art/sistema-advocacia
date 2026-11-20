@@ -9,6 +9,8 @@ import { teamOf, memberByEmail, RESPONSIBLE_OPTIONS, processResponsible } from '
 import MeuPainel, { EquipeResumo } from './painel';
 import PrazosView from './prazosView';
 import Tutorial from './tutorial';
+import FeriadosTool from './feriadosUI';
+import { UFS, diasUteisAte, somarDias, contextoDoProcesso, digitos as digitosOf, ufDoTribunal, comarcaDoTexto } from './feriados';
 import MessageComposer, { MsgOption } from './mensagens';
 import ClientFinanceModal from './financeiroCliente';
 import NamesTool from './padronizar';
@@ -261,58 +263,6 @@ async function saveRecoverySnapshotIfMissing(payload: any, key: string): Promise
   }
 }
 
-// Calendário forense: feriados nacionais, Carnaval, Paixão de Cristo, Corpus Christi,
-// Nossa Senhora da Penha (ES) e recesso forense (20/12 a 20/01, CPC art. 220).
-const holidayCache: Record<number, Set<string>> = {};
-function easterSunday(year: number) {
-  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
-  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
-}
-function isoOf(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-function holidaysOf(year: number) {
-  if (holidayCache[year]) return holidayCache[year];
-  const set = new Set<string>();
-  ['01-01', '04-21', '05-01', '09-07', '10-12', '11-02', '11-15', '11-20', '12-25'].forEach(md => set.add(`${year}-${md}`));
-  const easter = easterSunday(year);
-  const shift = (days: number) => { const d = new Date(easter); d.setDate(d.getDate() + days); return isoOf(d); };
-  [-48, -47, -2, 1, 60].forEach(n => set.add(shift(n))); // Carnaval (seg/ter), Sexta-feira da Paixão, Segunda da Penha (ES), Corpus Christi
-  holidayCache[year] = set;
-  return set;
-}
-function isForensicRecess(d: Date) {
-  const m = d.getMonth() + 1, day = d.getDate();
-  return (m === 12 && day >= 20) || (m === 1 && day <= 20);
-}
-function isBusinessDay(d: Date) {
-  const wd = d.getDay();
-  if (wd === 0 || wd === 6) return false;
-  if (isForensicRecess(d)) return false;
-  return !holidaysOf(d.getFullYear()).has(isoOf(d));
-}
-function estimateBusinessDaysUntil(dateValue: string) {
-  if (!dateValue) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(`${dateValue}T00:00:00`);
-  if (Number.isNaN(due.getTime())) return null;
-  if (due < today) return -1;
-  let count = 0;
-  const cursor = new Date(today);
-  while (cursor < due) {
-    cursor.setDate(cursor.getDate() + 1);
-    if (isBusinessDay(cursor)) count += 1;
-  }
-  return count;
-}
-
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -453,6 +403,16 @@ export default function App() {
   const [documentDraft, setDocumentDraft] = useState({ title: '', client: '', process: '', category: 'Contrato de honorários', fileName: '', dataUrl: '', size: 0 });
   const [officeSettings, setOfficeSettings] = useState<any>(() => readLocalValue('vm-office-settings', { officeName: 'Valeska Monteiro Advocacia', oab: 'OAB/ES 41.715', email: 'contato@valeskamonteiro.adv.br', phone: '(27) 99752-5314', address: 'Serra / ES', lgpdConsent: false, lgpdAcceptedAt: '' }));
   const team = teamOf(officeSettings);
+  const feriadosCustom: any[] = Array.isArray(officeSettings?.feriados) ? officeSettings.feriados : [];
+  const ufPadrao: string = officeSettings?.ufPadrao || 'ES';
+  // Processo ligado a um prazo: pelo número; se não houver, pelo cliente quando ele tem um único processo.
+  const processoDoPrazo = (d: any) => {
+    const n = digitosOf(d?.process);
+    if (n) { const p = processes.find((x: any) => digitosOf(x.number) === n); if (p) return p; }
+    const mesmos = processes.filter((x: any) => String(x.client || '').trim().toLowerCase() === String(d?.client || '').trim().toLowerCase());
+    return mesmos.length === 1 ? mesmos[0] : null;
+  };
+  const ctxDoPrazo = (d: any) => contextoDoProcesso(processoDoPrazo(d), ufPadrao);
   const [meChoice, setMeChoice] = useState<string>(() => { try { return localStorage.getItem('vm-me') || ''; } catch { return ''; } });
   const [dashView, setDashView] = useState<'meu' | 'escritorio'>('meu');
   const me = memberByEmail(team, session?.user?.email) || team.find(m => m.id === meChoice) || null;
@@ -586,7 +546,9 @@ export default function App() {
     descontos: '',
     status: 'Em andamento',
     responsible: 'valeska',
-    area: ''
+    area: '',
+    uf: '',
+    comarca: ''
   });
   const [areaFilter, setAreaFilter] = useState<string>('Todas');
 
@@ -1090,7 +1052,7 @@ export default function App() {
       descontos: Number(newProcess.descontos || 0)
     };
     setProcesses(prev => [item, ...prev]);
-    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento', responsible: me?.id || 'valeska', area: '' });
+    setNewProcess({ number: '', client: '', action: '', court: '', value: '', honorarios: '', descontos: '', status: 'Em andamento', responsible: me?.id || 'valeska', area: '', uf: '', comarca: '' });
     setIsNewProcessOpen(false);
   };
 
@@ -1446,18 +1408,9 @@ export default function App() {
   };
   const toISODate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-  // Estimativa preliminar: exclui fins de semana, mas não feriados nem suspensões.
-  // Não representa contagem jurídica definitiva e só é exibida para conferência manual.
-  const addDays = (base: Date, n: number, uteis: boolean) => {
-    const d = new Date(base);
-    let left = n;
-    while (left > 0) {
-      d.setDate(d.getDate() + 1);
-      if (!uteis || (d.getDay() !== 0 && d.getDay() !== 6)) left -= 1;
-    }
-    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-    return d;
-  };
+  // Estimativa: pula fins de semana, feriados nacionais, estaduais, os da comarca do processo e o recesso forense.
+  // Não representa contagem jurídica definitiva (termo inicial, suspensões do tribunal e regras do procedimento).
+  const addDays = (base: Date, n: number, uteis: boolean, ctx: any) => somarDias(base, n, uteis, ctx, feriadosCustom);
 
   const MESES: Record<string, number> = { janeiro: 0, fevereiro: 1, 'março': 2, marco: 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
 
@@ -1501,7 +1454,8 @@ export default function App() {
     const base = parseScanDate(item.date);
     if (prazo && base) {
       const uteis = !/corridos/i.test(prazo[2] || '');
-      return { dueDate: toISODate(addDays(base, Number(prazo[1]), uteis)), dueTime: '23:59', type: 'FATAL' };
+      const procDoItem = processes.find((p: any) => digitosOf(p.number) === digitosOf(item.process));
+      return { dueDate: toISODate(addDays(base, Number(prazo[1]), uteis, contextoDoProcesso(procDoItem, ufPadrao))), dueTime: '23:59', type: 'FATAL' };
     }
     return null;
   };
@@ -1805,7 +1759,7 @@ export default function App() {
       info = { dueDate: toISODate(d), dueTime: '23:59', type: 'FATAL' };
     }
     const dataCandidata = info.dueDate.split('-').reverse().join('/');
-    const confirmacao = window.confirm(`O sistema identificou ${dataCandidata} como data candidata. A contagem ainda NÃO considera feriados, suspensões, termo inicial ou regras específicas do procedimento.
+    const confirmacao = window.confirm(`O sistema identificou ${dataCandidata} como data candidata. A contagem considera fins de semana, feriados nacionais, estaduais e os cadastrados para a comarca do processo, mas NÃO considera suspensões do tribunal, termo inicial ou regras específicas do procedimento.
 
 Você conferiu a publicação e confirma que deseja cadastrar essa data na Agenda?`);
     if (!confirmacao) return;
@@ -1945,6 +1899,26 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
     const message = `Olá, ${primeiro}! Passando para atualizar você sobre o processo nº ${proc.number}. ${assunto} Estamos acompanhando o andamento e, se houver alguma providência necessária, entrarei em contato. Qualquer dúvida, é só me chamar.`;
     setClientMessageDrafts((prev: any) => [{ id: `draft-manual-${Date.now()}`, process: proc.number, client: proc.client, phone: cliente?.phone || '', message, status: 'Aguardando sua revisão', createdAt: new Date().toISOString() }, ...(Array.isArray(prev) ? prev : [])]);
     if (!cliente?.phone) window.alert('Este cliente está sem telefone cadastrado. O texto foi preparado, mas para abrir o WhatsApp cadastre o telefone em Clientes.');
+  };
+  const comarcasConhecidas = Array.from(new Set(processes.map((p: any) => contextoDoProcesso(p, ufPadrao).comarca).filter(Boolean)));
+  const LocalProcesso = ({ data, onChange }: { data: any; onChange: (patch: any) => void }) => {
+    const auto = contextoDoProcesso({ ...data, uf: '', comarca: '' }, ufPadrao);
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="font-bold block mb-1">Estado</label>
+          <select aria-label="Estado do processo" value={data.uf || ''} onChange={(e) => onChange({ uf: e.target.value })} className="w-full p-2.5 border rounded-lg bg-white">
+            <option value="">Automático ({auto.uf})</option>
+            {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="font-bold block mb-1">Comarca (cidade)</label>
+          <input type="text" list="lista-comarcas-proc" aria-label="Comarca do processo" value={data.comarca || ''} onChange={(e) => onChange({ comarca: e.target.value })} className="w-full p-2.5 border rounded-lg" placeholder={auto.comarca ? `Automático (${auto.comarca})` : 'Ex.: Serra'} />
+          <datalist id="lista-comarcas-proc">{comarcasConhecidas.map(c => <option key={c} value={c} />)}</datalist>
+        </div>
+      </div>
+    );
   };
   const AreaButtons = ({ value, onChange }: { value: string; onChange: (a: string) => void }) => (
     <div className="flex flex-wrap gap-2" role="group" aria-label="Área do processo">
@@ -2658,7 +2632,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
 
           {/* SUBABA: PRAZOS E INTIMAÇÕES */}
           {activeTab === 'agenda' && agendaSubTab === 'prazos' && (
-            <PrazosView PALETTE={PALETTE} deadlines={deadlines} processes={processes} team={team} me={me} businessDaysUntil={estimateBusinessDaysUntil} onOpen={(item: any) => setSelectedDeadlineModal(item)} onNew={() => setIsNewDeadlineOpen(true)} />
+            <PrazosView PALETTE={PALETTE} deadlines={deadlines} processes={processes} team={team} me={me} businessDaysUntil={(iso: string, d: any) => diasUteisAte(iso, ctxDoPrazo(d), feriadosCustom)} onOpen={(item: any) => setSelectedDeadlineModal(item)} onNew={() => setIsNewDeadlineOpen(true)} />
           )}
 
           {/* TAB: VARREDURA, agora dentro de Prazos e Agenda */}
@@ -3387,6 +3361,7 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
                 <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={toggleTheme} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}>{isDarkMode ? <Sun size={13}/> : <Moon size={13}/>} Alternar tema</button><button type="submit" className="px-4 py-2 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: PALETTE.bordoPrincipal }}>Salvar configurações</button></div>
               </form>
               <NamesTool PALETTE={PALETTE} clients={clients} setClients={setClients} processes={processes} setProcesses={setProcesses} deadlines={deadlines} setDeadlines={setDeadlines} entries={financialEntries} setEntries={setFinancialEntries} leads={leads} setLeads={setLeads} notify={setModuleNotice} />
+              <FeriadosTool PALETTE={PALETTE} feriados={feriadosCustom} setFeriados={(f) => setOfficeSettings((prev: any) => ({ ...prev, feriados: f }))} ufPadrao={ufPadrao} setUfPadrao={(u) => setOfficeSettings((prev: any) => ({ ...prev, ufPadrao: u }))} notify={setModuleNotice} comarcas={comarcasConhecidas} />
               <section className="p-5 rounded-2xl border space-y-3" style={{ backgroundColor: PALETTE.fundoCartoes, borderColor: PALETTE.linhasBordas }}><h4 className="font-bold text-sm" style={{ color: PALETTE.textoPrincipal }}>Backup e restauração</h4><p className="text-xs" style={{ color: PALETTE.textoApoio }}>Exporte os registros para um arquivo JSON ou restaure um backup anterior. Guarde o arquivo de forma segura: ele pode conter dados pessoais e informações confidenciais.</p><div className="flex flex-wrap gap-2"><button type="button" onClick={downloadBackup} className="px-4 py-2 rounded-lg text-xs font-bold text-white flex items-center gap-2" style={{ backgroundColor: PALETTE.bordoPrincipal }}><Download size={14}/> Exportar backup</button><button type="button" onClick={() => document.getElementById('vm-backup-import')?.click()} className="px-4 py-2 rounded-lg border text-xs font-bold flex items-center gap-2" style={{ borderColor: PALETTE.linhasBordas, color: PALETTE.textoPrincipal }}><Upload size={14}/> Importar backup</button><input id="vm-backup-import" type="file" accept="application/json,.json" className="hidden" onChange={handleImportBackup}/></div><p className="text-[10px]" style={{ color: PALETTE.textoApoio }}>Os dados já existentes podem continuar apenas no estado da aplicação; faça o backup antes de atualizar o código. O armazenamento permanente e multiusuário precisa ser configurado no backend.</p></section>
             </div>
           )}
@@ -5350,6 +5325,7 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                   <input type="text" value={newProcess.court} onChange={(e) => setNewProcess({ ...newProcess, court: e.target.value })} className="w-full p-2.5 border rounded-lg" placeholder="TJES / TRT17" />
                 </div>
               </div>
+              <LocalProcesso data={newProcess} onChange={(patch) => setNewProcess({ ...newProcess, ...patch })} />
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="font-bold block mb-1">Valor Causa (R$)</label>
@@ -5435,6 +5411,9 @@ try{const s=localStorage.getItem('calc-trab');if(s)apply(JSON.parse(s));else{ren
                   <input type={inputType || 'text'} value={editingItem.data[field] ?? ''} onChange={e => setEditingItem(prev => ({ ...prev, data: { ...prev.data, [field]: e.target.value } }))} className="w-full p-2.5 border rounded-lg"/>
                 </div>
               ))}
+              {editingItem.type === 'process' && (
+                <LocalProcesso data={editingItem.data} onChange={(patch) => setEditingItem(prev => ({ ...prev, data: { ...prev.data, ...patch } }))} />
+              )}
               {editingItem.type === 'process' && (
                 <div>
                   <label className="font-bold block mb-1">Área</label>
