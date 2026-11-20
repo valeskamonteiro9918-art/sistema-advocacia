@@ -63,9 +63,11 @@ const MENU_PALETTE = {
 };
 
 // ===== FUNIL DO ESCRITÓRIO (9 etapas) =====
-const FUNNEL_STAGES = ['Novo contato','Triagem','Aguardando documentos','Consulta agendada','Proposta enviada','Contratado','Em andamento','Concluído','Perdido'];
-const CONVERTED_STAGES = ['Contratado','Em andamento','Concluído'];
-const STAGE_MAX_DAYS: Record<string, number> = { 'Novo contato': 1, 'Triagem': 1, 'Aguardando documentos': 10, 'Consulta agendada': 7, 'Proposta enviada': 5, 'Contratado': 5, 'Em andamento': 15 };
+const FUNNEL_STAGES = ['Novo contato','Em conversa','Consulta agendada','Proposta enviada','Contratado','Perdido'];
+const CONVERTED_STAGES = ['Contratado'];
+const STAGE_MAX_DAYS: Record<string, number> = { 'Novo contato': 1, 'Em conversa': 7, 'Consulta agendada': 7, 'Proposta enviada': 5 };
+// Etapas antigas passam para as novas sem perder o contato.
+const OLD_STAGE_MAP: Record<string, string> = { 'Negociação': 'Proposta enviada', 'Triagem': 'Em conversa', 'Aguardando documentos': 'Em conversa', 'Em andamento': 'Contratado', 'Concluído': 'Contratado' };
 const CASE_TYPES = ['Divórcio','União estável','Guarda','Convivência','Alimentos','Inventário','Outro'];
 const URGENCY_LEVELS = ['Verde','Amarela','Vermelha'];
 const LOST_REASONS = ['Preço','Escolheu outro escritório','Desistiu','Sem documentos','Sem retorno','Fora do nicho'];
@@ -103,7 +105,8 @@ function daysSinceISO(value: string) {
   return Math.max(0, Math.floor((Date.now() - t) / 86400000));
 }
 function normalizeLead(l: any) {
-  const stage = l.stage === 'Negociação' ? 'Proposta enviada' : (FUNNEL_STAGES.includes(l.stage) ? l.stage : 'Novo contato');
+  const mapped = OLD_STAGE_MAP[l.stage] || l.stage;
+  const stage = FUNNEL_STAGES.includes(mapped) ? mapped : 'Novo contato';
   return { urgency: 'Verde', caseType: 'Outro', otherParty: '', nextActionDate: '', lostReason: '', docs: {}, originalMessage: '', city: '', existingProcess: '', childrenOrAssets: '', riskDetails: '', conflictStatus: 'Pendente de conferência', situation: 'Aguardando atendimento', responseAt: '', ...l, stage, stageSince: l.stageSince || l.createdAt || new Date().toISOString() };
 }
 const firstName = (n: string) => String(n || '').trim().split(/\s+/)[0] || '';
@@ -439,7 +442,7 @@ export default function App() {
 
   // Contatos: urgentes primeiro; encerrados por último.
   const sortedLeads = [...leads].sort((a: any, b: any) => {
-    const closed = (x: any) => (x.stage === 'Perdido' || x.stage === 'Concluído') ? 1 : 0;
+    const closed = (x: any) => (x.stage === 'Perdido' || x.stage === 'Contratado') ? 1 : 0;
     const urg = (x: any) => ({ Vermelha: 0, Amarela: 1, Verde: 2 } as any)[x.urgency] ?? 2;
     return closed(a) - closed(b) || urg(a) - urg(b) || new Date(a.stageSince || a.createdAt).getTime() - new Date(b.stageSince || b.createdAt).getTime();
   });
