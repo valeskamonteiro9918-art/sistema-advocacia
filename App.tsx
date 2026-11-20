@@ -8,6 +8,7 @@ import { downloadDocx, textToParagraphs } from './docx';
 import { teamOf, memberByEmail, RESPONSIBLE_OPTIONS, processResponsible } from './equipe';
 import MeuPainel, { EquipeResumo } from './painel';
 import PrazosView from './prazosView';
+import Tutorial from './tutorial';
 import MessageComposer, { MsgOption } from './mensagens';
 import ClientFinanceModal from './financeiroCliente';
 import NamesTool from './padronizar';
@@ -40,6 +41,7 @@ import {
   Wallet,
   FolderOpen,
   BarChart3,
+  HelpCircle,
   Settings,
   CalendarDays,
   ClipboardList,
@@ -427,7 +429,7 @@ export default function App() {
 
   // --- CÓDIGO ORIGINAL INTACTO ---
   // Ao atualizar a página (F5), continua na mesma tela. O Dashboard só abre no primeiro acesso da sessão.
-  const NAV_TABS = ['dashboard', 'processes', 'agenda', 'tasks', 'crm', 'leads', 'finances', 'documents', 'workspace', 'settings'];
+  const NAV_TABS = ['dashboard', 'processes', 'agenda', 'tasks', 'crm', 'leads', 'finances', 'documents', 'workspace', 'tutorial', 'settings'];
   const readNav = (key: string, fallback: string, allowed: string[]) => { try { const v = sessionStorage.getItem(key); return v && allowed.includes(v) ? v : fallback; } catch { return fallback; } };
   const [activeTab, setActiveTab] = useState(() => readNav('vm-nav-tab', 'dashboard', NAV_TABS));
   useEffect(() => { try { sessionStorage.setItem('vm-nav-tab', activeTab); } catch { /* sem armazenamento */ } }, [activeTab]);
@@ -2216,7 +2218,8 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               { id: 'crm', label: 'Clientes', icon: Users },
               { id: 'finances', label: 'Financeiro', icon: Wallet },
               { id: 'documents', label: 'Documentos', icon: FolderOpen },
-              { id: 'workspace', label: 'Calculadoras', icon: Calculator }
+              { id: 'workspace', label: 'Calculadoras', icon: Calculator },
+              { id: 'tutorial', label: 'Como usar', icon: HelpCircle }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id || (tab.id === 'crm' && activeTab === 'leads');
@@ -3334,6 +3337,11 @@ Você conferiu a publicação e confirma que deseja cadastrar essa data na Agend
               </section>
               <p className="text-[10px] p-3 rounded-lg" style={{ backgroundColor: PALETTE.fundoPagina, color: PALETTE.textoApoio }}>Atenção: os arquivos ficam guardados só neste aparelho, e não aparecem em outros computadores ou no celular. Para documentos sigilosos ou que você precise ver em mais de um lugar, guarde também no Drive do escritório.</p>
             </div>
+          )}
+
+          {/* MÓDULO: COMO USAR (tutorial) */}
+          {activeTab === 'tutorial' && (
+            <Tutorial PALETTE={PALETTE} onGo={(tab) => { setActiveTab(tab); setModuleNotice(''); if (tab === 'agenda') setAgendaSubTab('prazos'); if (tab === 'workspace') setWorkspaceSubTab('calculadoras'); if (tab === 'documents') setDocSubTab('modelos'); window.scrollTo({ top: 0 }); }} />
           )}
 
           {/* MÓDULO: CONFIGURAÇÕES DO ESCRITÓRIO */}
